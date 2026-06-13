@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.1.0...v1.2.0) (2026-06-13)
+
+### ✨ New Features
+
+* Added Predictive Back Gesture patch ([e17aa86](https://github.com/humzakh/HK-Morphe-Patches/commit/e17aa86b593f8473bf66fbc6bf2f373dcf8f4d33))
+
 ## [1.2.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.1.0...v1.2.0-dev.1) (2026-06-13)
 
 ### ✨ New Features
