@@ -1,4 +1,4 @@
-package app.template.patches.syncforreddit
+package app.template.patches.reddit.customclients.sync.syncforreddit.api
 
 import app.morphe.patcher.Fingerprint
 
