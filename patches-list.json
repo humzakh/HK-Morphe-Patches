@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.1.0",
+  "version": "1.2.0-dev.1",
   "patches": [
     {
       "name": "Fix Restore Comment",
@@ -116,6 +116,14 @@
           ]
         }
       ],
+      "options": []
+    },
+    {
+      "name": "Predictive back gesture",
+      "description": "Enables the predictive back gesture introduced on Android 13.",
+      "default": true,
+      "dependencies": [],
+      "compatiblePackages": null,
       "options": []
     },
     {
