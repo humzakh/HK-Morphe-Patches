@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.2.0...v1.3.0) (2026-06-13)
+
+### ✨ New Features
+
+* Fix Other Discussions button ([51d0ddf](https://github.com/humzakh/HK-Morphe-Patches/commit/51d0ddf8585b2e17fb06c0f20213525d66e164f2))
+
 ## [1.3.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.2.0...v1.3.0-dev.1) (2026-06-13)
 
 ### ✨ New Features
