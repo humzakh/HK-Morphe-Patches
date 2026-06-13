@@ -1,4 +1,6 @@
-package app.template.patches.syncforreddit
+package app.template.patches.reddit.customclients.sync.syncforreddit.fix.random
+
+import app.template.patches.reddit.customclients.sync.syncforreddit.api.SyncForRedditCompatible
 
 import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.AccessFlags

@@ -5,9 +5,9 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.0.0](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.0.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;6 patches total
+> **[v1.1.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.1.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;12 patches total
 <details open>
-<summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
+<summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -17,30 +17,36 @@ Some Morphe patches for apps I use.
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
+| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
 | [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
 
 </details>
 
 <details open>
-<summary>📦 Sync for Reddit Pro&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
+<summary>📦 Sync for Reddit Pro&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
 <br>
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
+| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
 | [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
 
 </details>
 
 <details open>
-<summary>📦 Sync for Reddit Dev&nbsp;&nbsp;•&nbsp;&nbsp;2 patches</summary>
+<summary>📦 Sync for Reddit Dev&nbsp;&nbsp;•&nbsp;&nbsp;4 patches</summary>
 <br>
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
+| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
 | [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
 
 </details>
 
