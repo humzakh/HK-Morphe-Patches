@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-06-13T20:55:58",
-  "description": "## [1.1.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.0.0...v1.1.0-dev.1) (2026-06-13)\n\n### ✨ New Features\n\n* Added Sync Ultra unlock ([7b51e6e](https://github.com/humzakh/HK-Morphe-Patches/commit/7b51e6eece7e1215765d9216aa3367d497ae031a))\n* Fix Restore Comment button ([c32cd09](https://github.com/humzakh/HK-Morphe-Patches/commit/c32cd091255c484df65793c8d0870175ecd1d6ef))",
-  "download_url": "https://github.com/humzakh/HK-Morphe-Patches/releases/download/v1.1.0-dev.1/patches-1.1.0-dev.1.mpp",
+  "created_at": "2026-06-13T21:01:41",
+  "description": "## [1.1.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.0.0...v1.1.0) (2026-06-13)\n\n### ✨ New Features\n\n* Added Sync Ultra unlock ([7b51e6e](https://github.com/humzakh/HK-Morphe-Patches/commit/7b51e6eece7e1215765d9216aa3367d497ae031a))\n* Fix Restore Comment button ([c32cd09](https://github.com/humzakh/HK-Morphe-Patches/commit/c32cd091255c484df65793c8d0870175ecd1d6ef))",
+  "download_url": "https://github.com/humzakh/HK-Morphe-Patches/releases/download/v1.1.0/patches-1.1.0.mpp",
   "signature_download_url": "",
-  "version": "1.1.0-dev.1"
+  "version": "1.1.0"
 }

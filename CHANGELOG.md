@@ -1,3 +1,10 @@
+## [1.1.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.0.0...v1.1.0) (2026-06-13)
+
+### ✨ New Features
+
+* Added Sync Ultra unlock ([7b51e6e](https://github.com/humzakh/HK-Morphe-Patches/commit/7b51e6eece7e1215765d9216aa3367d497ae031a))
+* Fix Restore Comment button ([c32cd09](https://github.com/humzakh/HK-Morphe-Patches/commit/c32cd091255c484df65793c8d0870175ecd1d6ef))
+
 ## [1.1.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.0.0...v1.1.0-dev.1) (2026-06-13)
 
 ### ✨ New Features
