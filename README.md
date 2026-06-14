@@ -5,7 +5,7 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START EXPANDED -->
-> **[v1.3.0](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.3.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;16 patches total
+> **[v1.3.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.3.1-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;16 patches total
 <details open>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;5 patches</summary>
 <br>
@@ -18,10 +18,10 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix Other Discussions](#fix-other-discussions) | Fixes the Other Discussions feature. |  |
-| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
-| [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
+| [Fix random subreddit](#fix-random-subreddit) | Fixes the random subreddit button by fetching from an alternative API. |  |
+| [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with Sync-specific fixes. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) |  |  |
 
 </details>
 
@@ -32,10 +32,10 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix Other Discussions](#fix-other-discussions) | Fixes the Other Discussions feature. |  |
-| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
-| [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
+| [Fix random subreddit](#fix-random-subreddit) | Fixes the random subreddit button by fetching from an alternative API. |  |
+| [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with Sync-specific fixes. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) |  |  |
 
 </details>
 
@@ -46,10 +46,10 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix Other Discussions](#fix-other-discussions) | Fixes the Other Discussions feature. |  |
-| [Fix Restore Comment](#fix-restore-comment) | Fixes the Restore Comment feature (requires Sync Ultra). |  |
-| [Fix random subreddit](#fix-random-subreddit) | Fixes the random button by fetching from an alternative API. |  |
+| [Fix random subreddit](#fix-random-subreddit) | Fixes the random subreddit button by fetching from an alternative API. |  |
+| [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with Sync-specific fixes. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID. | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra. |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) |  |  |
 
 </details>
 
@@ -59,7 +59,7 @@ Some Morphe patches for apps I use.
 
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
-| [Predictive back gesture](#predictive-back-gesture) | Enables the predictive back gesture introduced on Android 13. |  |
+| [Predictive back gesture](#predictive-back-gesture) | Enables the predictive back gesture introduced in Android 13. |  |
 
 </details>
 

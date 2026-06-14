@@ -11,7 +11,7 @@ private const val EXTENSION_CLASS_DESCRIPTOR =
 @Suppress("unused")
 val randomSubredditPatch = bytecodePatch(
     name = "Fix random subreddit",
-    description = "Fixes the random button by fetching from an alternative API.",
+    description = "Fixes the random subreddit button by fetching from an alternative API.",
     default = true,
 ) {
     extendWith("extensions/syncforreddit.mpe")

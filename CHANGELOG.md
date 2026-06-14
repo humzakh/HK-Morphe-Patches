@@ -1,3 +1,9 @@
+## [1.3.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.0...v1.3.1-dev.1) (2026-06-14)
+
+### 🐛 Bug Fixes
+
+* Fixed predictive back gesture in Sync ([132986f](https://github.com/humzakh/HK-Morphe-Patches/commit/132986f8f3a54116c38a10c5ffa1bc7976ee3c03))
+
 ## [1.3.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.2.0...v1.3.0) (2026-06-13)
 
 ### ✨ New Features
