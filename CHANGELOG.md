@@ -1,3 +1,9 @@
+## [1.3.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.1...v1.3.2) (2026-06-14)
+
+### 🐛 Bug Fixes
+
+* disabled universal predictive back gesture patch by default ([668573e](https://github.com/humzakh/HK-Morphe-Patches/commit/668573e69bb25469a4d9a69d34cef03677be13d7))
+
 ## [1.3.2-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.1...v1.3.2-dev.1) (2026-06-14)
 
 ### 🐛 Bug Fixes
