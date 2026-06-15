@@ -4,7 +4,7 @@ Some Morphe patches for apps I use.
 
 ## Patches list
 
-<!-- PATCHES_START EXPANDED -->
+<!-- PATCHES_START -->
 > **[v1.3.3](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.3.3)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;16 patches total
 <details open>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;5 patches</summary>

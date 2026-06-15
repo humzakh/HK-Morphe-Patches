@@ -8,7 +8,8 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.all.misc.string.replaceStringPatch
 
 val syncUltraPatch = bytecodePatch(
-    name = "Unlocks Sync Ultra and fixes the \"Restore Comment\" feature by fetching from an alternative API."
+    name = "Unlock Sync Ultra",
+    description = "Unlocks Sync Ultra and fixes the \"Restore Comment\" premium feature by fetching from an alternative API.",
 ) {
     compatibleWith(*SyncForRedditCompatible)
 
