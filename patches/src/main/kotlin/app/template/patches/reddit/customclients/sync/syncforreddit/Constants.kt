@@ -1,4 +1,4 @@
-package app.template.patches.reddit.customclients.sync.syncforreddit.api
+package app.template.patches.reddit.customclients.sync.syncforreddit
 
 import app.morphe.patcher.patch.AppTarget
 import app.morphe.patcher.patch.Compatibility

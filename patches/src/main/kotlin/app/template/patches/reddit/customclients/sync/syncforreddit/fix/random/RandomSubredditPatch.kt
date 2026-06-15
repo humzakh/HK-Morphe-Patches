@@ -1,6 +1,6 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.fix.random
 
-import app.template.patches.reddit.customclients.sync.syncforreddit.api.SyncForRedditCompatible
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
@@ -10,8 +10,8 @@ private const val EXTENSION_CLASS_DESCRIPTOR =
 
 @Suppress("unused")
 val randomSubredditPatch = bytecodePatch(
-    name = "Fix random subreddit",
-    description = "Fixes the random subreddit button by fetching from an alternative API.",
+    name = "Fix r/random",
+    description = "Restores random subreddit functionality by fetching from an alternative API.",
     default = true,
 ) {
     extendWith("extensions/syncforreddit.mpe")
