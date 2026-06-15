@@ -5,7 +5,7 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START -->
-> **[v1.3.3](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.3.3)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;16 patches total
+> **[v1.3.4-dev.1](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.3.4-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;16 patches total
 <details open>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;5 patches</summary>
 <br>
@@ -21,7 +21,7 @@ Some Morphe patches for apps I use.
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlocks Sync Ultra and fixes the "Restore Comment" feature by fetching from an alternative API.](#unlocks-sync-ultra-and-fixes-the-restore-comment-feature-by-fetching-from-an-alternative-api) |  |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra and fixes the "Restore Comment" premium feature by fetching from an alternative API. |  |
 
 </details>
 
@@ -35,7 +35,7 @@ Some Morphe patches for apps I use.
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlocks Sync Ultra and fixes the "Restore Comment" feature by fetching from an alternative API.](#unlocks-sync-ultra-and-fixes-the-restore-comment-feature-by-fetching-from-an-alternative-api) |  |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra and fixes the "Restore Comment" premium feature by fetching from an alternative API. |  |
 
 </details>
 
@@ -49,7 +49,7 @@ Some Morphe patches for apps I use.
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
-| [Unlocks Sync Ultra and fixes the "Restore Comment" feature by fetching from an alternative API.](#unlocks-sync-ultra-and-fixes-the-restore-comment-feature-by-fetching-from-an-alternative-api) |  |  |
+| [Unlock Sync Ultra](#unlock-sync-ultra) | Unlocks Sync Ultra and fixes the "Restore Comment" premium feature by fetching from an alternative API. |  |
 
 </details>
 

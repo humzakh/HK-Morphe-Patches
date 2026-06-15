@@ -1,3 +1,9 @@
+## [1.3.4-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.3...v1.3.4-dev.1) (2026-06-15)
+
+### 🐛 Bug Fixes
+
+* Fix Sync Ultra name and description ([2b77176](https://github.com/humzakh/HK-Morphe-Patches/commit/2b771764bc992a7638dac5958e4102c0b53d3b80))
+
 ## [1.3.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.2...v1.3.3) (2026-06-15)
 
 ### 🐛 Bug Fixes
