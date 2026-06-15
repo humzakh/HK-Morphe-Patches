@@ -29,7 +29,7 @@ fun spoofClientPatch(
         null,
         "OAuth client ID",
         "The Reddit OAuth client ID. Refer to Patcheddit documentation for more " +
-                "information on what to put here.",
+                "information on what to put here. Default value is RedReader's client ID.",
         true,
         validator = { value ->
             if (value.isNullOrBlank()) {
@@ -73,6 +73,6 @@ fun spoofClientPatch(
     ) -> Unit,
 ) = spoofClientPatch(
     name = "Spoof client",
-    description = "Restores functionality of the app by using custom client ID.",
+    description = "Restores functionality of the app by using custom client ID (default included).",
     block = block,
 )

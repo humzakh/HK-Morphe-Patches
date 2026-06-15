@@ -6,6 +6,7 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.StringComparisonType
 import app.morphe.patches.all.misc.string.replaceStringPatch
 import app.template.patches.reddit.customclients.spoofClientPatch
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.StringReference

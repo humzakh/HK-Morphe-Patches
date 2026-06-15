@@ -1,3 +1,9 @@
+## [1.3.3-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.2...v1.3.3-dev.1) (2026-06-15)
+
+### 🐛 Bug Fixes
+
+* updated descriptions, organized patches ([05061c0](https://github.com/humzakh/HK-Morphe-Patches/commit/05061c0e90e3463a3f47d5cc2a9b1746494d72fa))
+
 ## [1.3.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.1...v1.3.2) (2026-06-14)
 
 ### 🐛 Bug Fixes
