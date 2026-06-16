@@ -7,7 +7,7 @@ import org.json.JSONObject;
  *
  * @noinspection unused
  */
-public class FixRandomSubredditPatch {
+public class RandomSubredditPatch {
     public static String parseRandomResponse(byte[] data) {
         try {
             String responseBody = new String(data, "UTF-8");

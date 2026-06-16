@@ -1,12 +1,11 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.fix.random
 
-import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
-
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.patch.bytecodePatch
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
 private const val EXTENSION_CLASS_DESCRIPTOR =
-    "Lapp/morphe/extension/syncforreddit/FixRandomSubredditPatch;"
+    "Lapp/morphe/extension/syncforreddit/RandomSubredditPatch;"
 
 @Suppress("unused")
 val randomSubredditPatch = bytecodePatch(
