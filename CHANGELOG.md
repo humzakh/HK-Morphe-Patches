@@ -1,3 +1,9 @@
+## [1.4.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.4...v1.4.0-dev.1) (2026-06-16)
+
+### ✨ New Features
+
+* Added experimental "Swipe to return" translucency patch ([6d247d9](https://github.com/humzakh/HK-Morphe-Patches/commit/6d247d92fb7e102803cf4d856f13c58e1d5938a4))
+
 ## [1.3.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.3...v1.3.4) (2026-06-15)
 
 ### 🐛 Bug Fixes
