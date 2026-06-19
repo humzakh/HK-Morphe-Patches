@@ -1,3 +1,9 @@
+## [1.3.5](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.4...v1.3.5) (2026-06-19)
+
+### 🐛 Bug Fixes
+
+* Add "Fix imgur links" patch ([edea05c](https://github.com/humzakh/HK-Morphe-Patches/commit/edea05c7cd9307193555e024017a25d2bbf71962))
+
 ## [1.3.5-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.4...v1.3.5-dev.1) (2026-06-19)
 
 ### 🐛 Bug Fixes
