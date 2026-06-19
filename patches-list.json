@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.3.4",
+  "version": "1.3.5-dev.1",
   "patches": [
     {
       "name": "Fix \"Other Discussions\"",
@@ -58,6 +58,73 @@
         }
       ],
       "options": []
+    },
+    {
+      "name": "Fix Imgur Albums",
+      "description": "Restores native Imgur Album/Gallery viewing by bypassing the dead syncforreddit proxy and communicating directly with the official Imgur API.",
+      "default": true,
+      "dependencies": [],
+      "compatiblePackages": [
+        {
+          "packageName": "com.laurencedawson.reddit_sync",
+          "name": "Sync for Reddit",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": "v23.06.30-13:39",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        },
+        {
+          "packageName": "com.laurencedawson.reddit_sync.pro",
+          "name": "Sync for Reddit Pro",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        },
+        {
+          "packageName": "com.laurencedawson.reddit_sync.dev",
+          "name": "Sync for Reddit Dev",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": null,
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": [
+        {
+          "key": "imgur-client-id",
+          "title": "Imgur Client ID",
+          "description": "Your Imgur API Client ID. This is required to fix album loading. The default value is the official Imgur App Client ID, which bypasses registration.",
+          "required": true,
+          "type": "kotlin.String",
+          "default": "546c25a59c58ad7",
+          "values": null
+        }
+      ]
     },
     {
       "name": "Fix r/random",

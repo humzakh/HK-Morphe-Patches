@@ -1,3 +1,9 @@
+## [1.3.5-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.4...v1.3.5-dev.1) (2026-06-19)
+
+### 🐛 Bug Fixes
+
+* Fix Imgur albums ([8a33b88](https://github.com/humzakh/HK-Morphe-Patches/commit/8a33b88dd8321862e48c963fe30cfc28e9c357c9))
+
 ## [1.3.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.3...v1.3.4) (2026-06-15)
 
 ### 🐛 Bug Fixes
