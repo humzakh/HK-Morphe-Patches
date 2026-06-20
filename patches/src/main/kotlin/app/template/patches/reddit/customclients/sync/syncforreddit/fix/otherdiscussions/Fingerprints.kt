@@ -7,5 +7,5 @@ internal val otherDiscussionsBuildUrlFingerprint = Fingerprint(
     accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
     returnType = "Ljava/lang/String;",
     strings = listOf("submit.json?url="),
-    custom = { _, classDef -> classDef.type == "Ly8/k0;" }
+    custom = { _, classDef -> classDef.type in setOf("Ly8/k0;", "Lj8/k0;") }
 )
