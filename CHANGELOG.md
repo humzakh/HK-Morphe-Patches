@@ -1,3 +1,9 @@
+## [1.4.1-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.1-dev.1...v1.4.1-dev.2) (2026-06-28)
+
+### 🐛 Bug Fixes
+
+* Replace Profile swipe action with Restore Comment for deleted comments ([a0e0b56](https://github.com/humzakh/HK-Morphe-Patches/commit/a0e0b562ce35f0aa12890d0f537c44b4eb31dbab))
+
 ## [1.4.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.0...v1.4.1-dev.1) (2026-06-28)
 
 ### 🐛 Bug Fixes
