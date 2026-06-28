@@ -9,7 +9,7 @@ import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForReddi
 
 val restoreCommentPatch = bytecodePatch(
     name = "Fix \"Restore Comment\"",
-    description = "Fixes the \"Restore Comment\" feature (requires Sync Ultra) by fetching from an alternative API. Also adds a more accessible button for this feature."
+    description = "Fixes the \"Restore Comment\" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible."
 ) {
     compatibleWith(*SyncForRedditCompatible)
 
@@ -90,6 +90,35 @@ val restoreCommentPatch = bytecodePatch(
                 return-void
                 
                 :not_removed
+            """.trimIndent()
+        )
+
+        CommentSwipeActionProfileFingerprint.method.addInstructions(
+            0,
+            """
+                const/4 v0, 0x4
+                if-ne p2, v0, :not_profile_swipe
+                
+                invoke-virtual {p1}, $commentClassType->e()Ljava/lang/String;
+                move-result-object v0
+                
+                const-string v1, "[removed]"
+                invoke-virtual {v1, v0}, Ljava/lang/String;->equalsIgnoreCase(Ljava/lang/String;)Z
+                move-result v1
+                if-nez v1, :is_removed_swipe
+                
+                const-string v1, "[deleted]"
+                invoke-virtual {v1, v0}, Ljava/lang/String;->equalsIgnoreCase(Ljava/lang/String;)Z
+                move-result v0
+                if-eqz v0, :not_profile_swipe
+                
+                :is_removed_swipe
+                new-instance v0, Lr8/h;
+                invoke-direct {v0, p1}, Lr8/h;-><init>($commentClassType)V
+                invoke-static {v0}, Lm8/a;->a(Lcom/android/volley/Request;)V
+                return-void
+                
+                :not_profile_swipe
             """.trimIndent()
         )
     }
