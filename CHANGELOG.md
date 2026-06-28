@@ -1,3 +1,9 @@
+## [1.4.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.5...v1.4.0) (2026-06-28)
+
+### ✨ New Features
+
+* Add Restore Comment patch with more accessible button ([f8e6e07](https://github.com/humzakh/HK-Morphe-Patches/commit/f8e6e07c1b271a5b53d3be75110cdabfc1b0233a))
+
 ## [1.4.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.5...v1.4.0-dev.1) (2026-06-28)
 
 ### ✨ New Features
