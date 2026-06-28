@@ -5,7 +5,7 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START -->
-> **[v1.4.0](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.4.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;22 patches total
+> **[v1.4.1-dev.2](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.4.1-dev.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;22 patches total
 <details>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;7 patches</summary>
 <br>
@@ -18,7 +18,7 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
-| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also adds a more accessible button for this feature. |  |
+| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
@@ -39,7 +39,7 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
-| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also adds a more accessible button for this feature. |  |
+| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
@@ -60,7 +60,7 @@ Some Morphe patches for apps I use.
 | 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
-| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also adds a more accessible button for this feature. |  |
+| [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
