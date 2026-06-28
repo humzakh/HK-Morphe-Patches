@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-06-28T01:33:16",
-  "description": "## [1.4.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.5...v1.4.0) (2026-06-28)\n\n### ✨ New Features\n\n* Add Restore Comment patch with more accessible button ([f8e6e07](https://github.com/humzakh/HK-Morphe-Patches/commit/f8e6e07c1b271a5b53d3be75110cdabfc1b0233a))",
-  "download_url": "https://github.com/humzakh/HK-Morphe-Patches/releases/download/v1.4.0/patches-1.4.0.mpp",
+  "created_at": "2026-06-28T17:34:31",
+  "description": "## [1.4.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.0...v1.4.1-dev.1) (2026-06-28)\n\n### 🐛 Bug Fixes\n\n* Support Sync Dev in Other Discussions fingerprint ([99fe4a9](https://github.com/humzakh/HK-Morphe-Patches/commit/99fe4a9493153268ee8176d4537b953ac5de19ca))",
+  "download_url": "https://github.com/humzakh/HK-Morphe-Patches/releases/download/v1.4.1-dev.1/patches-1.4.1-dev.1.mpp",
   "signature_download_url": "",
-  "version": "1.4.0"
+  "version": "1.4.1-dev.1"
 }

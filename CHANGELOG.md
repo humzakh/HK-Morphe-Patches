@@ -1,3 +1,9 @@
+## [1.4.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.0...v1.4.1-dev.1) (2026-06-28)
+
+### 🐛 Bug Fixes
+
+* Support Sync Dev in Other Discussions fingerprint ([99fe4a9](https://github.com/humzakh/HK-Morphe-Patches/commit/99fe4a9493153268ee8176d4537b953ac5de19ca))
+
 ## [1.4.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.3.5...v1.4.0) (2026-06-28)
 
 ### ✨ New Features
