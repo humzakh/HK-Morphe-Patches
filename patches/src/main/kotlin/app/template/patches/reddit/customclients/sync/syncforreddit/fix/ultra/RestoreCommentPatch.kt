@@ -7,13 +7,14 @@ import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.all.misc.string.replaceStringPatch
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
-val restoreCommentShortcutPatch = bytecodePatch(
+val restoreCommentPatch = bytecodePatch(
     name = "Fix \"Restore Comment\"",
     description = "Fixes the \"Restore Comment\" feature (requires Sync Ultra) by fetching from an alternative API. Also adds a more accessible button for this feature."
 ) {
     compatibleWith(*SyncForRedditCompatible)
 
     dependsOn(
+        syncUltraPatch,
         // patch the Restore Comment feature to fetch from Arctic Shift
         replaceStringPatch(
             "https://api.pushshift.io/reddit/comment/search/",
