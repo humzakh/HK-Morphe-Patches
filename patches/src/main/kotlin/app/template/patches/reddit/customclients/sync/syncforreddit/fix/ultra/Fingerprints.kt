@@ -44,3 +44,11 @@ internal val CommentHolderTFingerprint = Fingerprint(
     parameters = listOf(),
     accessFlags = listOf(AccessFlags.PRIVATE)
 )
+
+internal val CommentSwipeActionProfileFingerprint = Fingerprint(
+    definingClass = "Lgb/m;",
+    name = "E",
+    parameters = listOf("Lxa/d;", "I"),
+    returnType = "V",
+    accessFlags = listOf(AccessFlags.PRIVATE)
+)
