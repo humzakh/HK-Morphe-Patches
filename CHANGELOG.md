@@ -1,3 +1,9 @@
+## [1.4.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.1...v1.4.2) (2026-06-29)
+
+### 🐛 Bug Fixes
+
+* Replace icon in Restore Comment swipe action ([0ba7a9f](https://github.com/humzakh/HK-Morphe-Patches/commit/0ba7a9f1fba6ade4de6acfb8663a35fa8dbc71c8))
+
 ## [1.4.2-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.1...v1.4.2-dev.1) (2026-06-29)
 
 ### 🐛 Bug Fixes
