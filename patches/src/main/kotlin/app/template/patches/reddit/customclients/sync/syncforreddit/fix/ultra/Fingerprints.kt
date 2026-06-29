@@ -52,3 +52,11 @@ internal val CommentSwipeActionProfileFingerprint = Fingerprint(
     returnType = "V",
     accessFlags = listOf(AccessFlags.PRIVATE)
 )
+
+internal val CommentSwipeActionDrawFingerprint = Fingerprint(
+    definingClass = "Lgb/m;",
+    name = "u",
+    parameters = listOf("Landroid/graphics/Canvas;", "Landroidx/recyclerview/widget/RecyclerView;", "Landroidx/recyclerview/widget/RecyclerView\$c0;", "F", "F", "I", "Z"),
+    returnType = "V",
+    accessFlags = listOf(AccessFlags.PUBLIC)
+)
