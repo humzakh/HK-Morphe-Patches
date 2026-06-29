@@ -3,6 +3,7 @@ package app.template.patches.reddit.customclients.sync.syncforreddit.fix.ultra
 import app.morphe.patcher.StringComparisonType
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
+import app.morphe.patcher.extensions.InstructionExtensions.instructions
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.all.misc.string.replaceStringPatch
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
@@ -214,5 +215,40 @@ val restoreCommentPatch = bytecodePatch(
                 :skip_dynamic_icon
             """.trimIndent()
         )
+
+        // replace comment text notifying the user if Restore Comment failed
+        RestoreCommentParseNetworkResponseFingerprint.method.apply {
+            val bodyExtractionIndex = this.instructions.indexOfFirst { instr ->
+                try {
+                    val getRefMethod = instr.javaClass.methods.firstOrNull { it.name == "getReference" }
+                    if (getRefMethod != null) {
+                        val ref = getRefMethod.invoke(instr)
+                        if (ref != null) {
+                            val getDefClassMethod = ref.javaClass.methods.firstOrNull { it.name == "getDefiningClass" }
+                            val getNameMethod = ref.javaClass.methods.firstOrNull { it.name == "getName" }
+                            if (getDefClassMethod != null && getNameMethod != null) {
+                                val definingClass = getDefClassMethod.invoke(ref) as? String
+                                val name = getNameMethod.invoke(ref) as? String
+                                if (definingClass == "Lwc/p;" && name == "a") {
+                                    return@indexOfFirst true
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) { }
+                false
+            }
+            if (bodyExtractionIndex != -1) {
+                this.addInstructions(
+                    bodyExtractionIndex + 2,
+                    """
+                        const-string v10, "^(\\[removed\\]|\\[deleted\\])$"
+                        const-string v11, "[failed to restore comment]"
+                        invoke-virtual {v5, v10, v11}, Ljava/lang/String;->replaceFirst(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                        move-result-object v5
+                    """.trimIndent()
+                )
+            }
+        }
     }
 }

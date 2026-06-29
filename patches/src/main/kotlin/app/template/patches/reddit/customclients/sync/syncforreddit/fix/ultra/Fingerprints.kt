@@ -60,3 +60,10 @@ internal val CommentSwipeActionDrawFingerprint = Fingerprint(
     returnType = "V",
     accessFlags = listOf(AccessFlags.PUBLIC)
 )
+
+internal val RestoreCommentParseNetworkResponseFingerprint = Fingerprint(
+    definingClass = "Lr8/h;",
+    name = "parseNetworkResponse",
+    parameters = listOf("Lcom/android/volley/NetworkResponse;"),
+    returnType = "Lcom/android/volley/Response;"
+)
