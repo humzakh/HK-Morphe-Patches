@@ -1,3 +1,9 @@
+## [1.4.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.2...v1.4.3) (2026-06-29)
+
+### 🐛 Bug Fixes
+
+* Add message when Restore Comment fails ([f761a9a](https://github.com/humzakh/HK-Morphe-Patches/commit/f761a9a7b78ab66727f8cb078a195a49c29bcaf6))
+
 ## [1.4.3-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.2...v1.4.3-dev.1) (2026-06-29)
 
 ### 🐛 Bug Fixes
