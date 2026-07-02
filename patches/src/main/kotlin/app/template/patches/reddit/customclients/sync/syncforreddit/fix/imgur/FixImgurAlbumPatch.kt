@@ -1,8 +1,9 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.fix.imgur
 
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
 private fun getUrlExtractionSmali(fieldClass: String, fieldName: String, baseUrl: String): String = """
     new-instance v0, Ljava/lang/StringBuilder;

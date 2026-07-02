@@ -1,16 +1,14 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.fix.otherdiscussions
 
-import app.morphe.patcher.Fingerprint
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+
+import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
-import app.morphe.patcher.patch.bytecodePatch
-import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
-import com.android.tools.smali.dexlib2.AccessFlags
-import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
-@Suppress("unused")
 val otherDiscussionsPatch = bytecodePatch(
     name = "Fix \"Other Discussions\"",
     description = "Fixes the \"Other Discussions\" feature.",
