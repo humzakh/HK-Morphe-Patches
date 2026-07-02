@@ -1,3 +1,9 @@
+## [1.5.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.3...v1.5.0-dev.1) (2026-07-02)
+
+### ✨ New Features
+
+* Add Fix Image Post Selftext patch ([b859b7e](https://github.com/humzakh/HK-Morphe-Patches/commit/b859b7ed008f5879f65c5b0a4bdd8ecd7fb5ced4))
+
 ## [1.4.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.2...v1.4.3) (2026-06-29)
 
 ### 🐛 Bug Fixes

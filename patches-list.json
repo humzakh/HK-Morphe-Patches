@@ -1,6 +1,6 @@
 {
   "NOTE": "Do NOT manually edit this file. This file is automatically updated when semantic release (release.yml) runs. Manually editing this file can break your releases and break third party tools that use this file.",
-  "version": "1.4.3",
+  "version": "1.5.0-dev.1",
   "patches": [
     {
       "name": "Fix \"Other Discussions\"",
@@ -67,6 +67,63 @@
         "BytecodePatch",
         "BytecodePatch"
       ],
+      "compatiblePackages": [
+        {
+          "packageName": "com.laurencedawson.reddit_sync",
+          "name": "Sync for Reddit",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": "v23.06.30-13:39",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        },
+        {
+          "packageName": "com.laurencedawson.reddit_sync.pro",
+          "name": "Sync for Reddit Pro",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": "v23.06.30-13:39",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        },
+        {
+          "packageName": "com.laurencedawson.reddit_sync.dev",
+          "name": "Sync for Reddit Dev",
+          "description": null,
+          "apkFileType": null,
+          "appIconColor": null,
+          "signatures": null,
+          "targets": [
+            {
+              "version": "v23.06.30-13:39",
+              "isExperimental": false,
+              "minSdk": null,
+              "description": null
+            }
+          ]
+        }
+      ],
+      "options": []
+    },
+    {
+      "name": "Fix Image Post Selftext",
+      "description": "Makes body text in image posts function like regular selftext posts (selectable text, hyperlinked URLs [WIP]).",
+      "default": true,
+      "dependencies": [],
       "compatiblePackages": [
         {
           "packageName": "com.laurencedawson.reddit_sync",
