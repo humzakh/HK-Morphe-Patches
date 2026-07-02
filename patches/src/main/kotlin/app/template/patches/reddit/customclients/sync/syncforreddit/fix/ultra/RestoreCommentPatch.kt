@@ -1,12 +1,12 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.fix.ultra
 
-import app.morphe.patcher.StringComparisonType
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
-import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
-import app.morphe.patcher.extensions.InstructionExtensions.instructions
+import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patches.all.misc.string.replaceStringPatch
-import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
+import app.morphe.patcher.extensions.InstructionExtensions.instructions
+import app.morphe.patcher.StringComparisonType
 
 val restoreCommentPatch = bytecodePatch(
     name = "Fix \"Restore Comment\"",
