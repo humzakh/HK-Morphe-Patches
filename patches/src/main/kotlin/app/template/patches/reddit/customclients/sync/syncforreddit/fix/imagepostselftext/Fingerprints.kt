@@ -15,3 +15,31 @@ internal val SimpleSelftextPreviewTextViewInitFingerprint = Fingerprint(
     parameters = listOf("Landroid/content/Context;", "Landroid/util/AttributeSet;"),
     returnType = "V"
 )
+
+internal val CardSelftextPreviewTextViewBindFingerprint = Fingerprint(
+    definingClass = "Lcom/laurencedawson/reddit_sync/ui/views/posts/cards/CardSelftextPreviewTextView;",
+    name = "J",
+    parameters = listOf("Lxa/d;"),
+    returnType = "V"
+)
+
+internal val SimpleSelftextPreviewTextViewBindFingerprint = Fingerprint(
+    definingClass = "Lcom/laurencedawson/reddit_sync/ui/views/posts/simple/SimpleSelftextPreviewTextView;",
+    name = "K",
+    parameters = listOf("Lxa/d;"),
+    returnType = "V"
+)
+
+internal val CardSelftextPreviewTextViewExpandedBindFingerprint = Fingerprint(
+    definingClass = "Lcom/laurencedawson/reddit_sync/ui/views/posts/cards/CardSelftextPreviewTextView;",
+    name = "K",
+    parameters = listOf("Lxa/d;", "Z"),
+    returnType = "V"
+)
+
+internal val SimpleSelftextPreviewTextViewExpandedBindFingerprint = Fingerprint(
+    definingClass = "Lcom/laurencedawson/reddit_sync/ui/views/posts/simple/SimpleSelftextPreviewTextView;",
+    name = "L",
+    parameters = listOf("Lxa/d;", "Z"),
+    returnType = "V"
+)
