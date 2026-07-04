@@ -1,3 +1,5 @@
+## [1.5.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.5.0-dev.1...v1.5.0-dev.2) (2026-07-04)
+
 ## [1.5.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.4.3...v1.5.0-dev.1) (2026-07-02)
 
 ### ✨ New Features
