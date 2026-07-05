@@ -5,3 +5,7 @@ extension {
 android {
     namespace = "app.morphe.extension.syncforreddit"
 }
+
+dependencies {
+    compileOnly(project(":extensions:syncforreddit:stubs"))
+}
