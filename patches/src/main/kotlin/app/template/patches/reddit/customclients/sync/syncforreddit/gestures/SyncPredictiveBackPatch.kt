@@ -1,7 +1,8 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.gestures
 
-import app.morphe.patcher.patch.resourcePatch
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+
+import app.morphe.patcher.patch.resourcePatch
 
 val syncPredictiveBackPatch = resourcePatch(
     name = "Predictive back gesture (Reddit Sync)",
