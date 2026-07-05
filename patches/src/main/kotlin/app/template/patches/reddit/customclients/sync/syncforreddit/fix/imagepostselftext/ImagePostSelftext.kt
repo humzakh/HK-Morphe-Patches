@@ -3,7 +3,6 @@ package app.template.patches.reddit.customclients.sync.syncforreddit.fix.imagepo
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
 import app.morphe.patcher.patch.bytecodePatch
-import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.MethodReference
@@ -12,26 +11,13 @@ private const val EXTENSION_CLASS_DESCRIPTOR = "Lapp/morphe/extension/syncforred
 
 val imagePostSelftextPatch = bytecodePatch(
     name = "Fix Image Post Selftext",
-    description = "Makes body text in image posts function like regular selftext posts (selectable text, hyperlinked URLs [WIP]).",
+    description = "Fixes selftext in image posts to properly render Markdown.",
     default = true,
 ) {
     extendWith("extensions/syncforreddit.mpe")
     compatibleWith(*SyncForRedditCompatible)
 
     execute {
-        listOf(
-            CardSelftextPreviewTextViewInitFingerprint,
-            SimpleSelftextPreviewTextViewInitFingerprint
-        ).forEach { fingerprint ->
-            fingerprint.method.addInstructions(
-                1,
-                """
-                    invoke-static {p0}, $EXTENSION_CLASS_DESCRIPTOR->applyLongClickListener(Landroid/widget/TextView;)V
-                """.trimIndent()
-            )
-        }
-
-        // Patch the expanded bind methods (K in Card, L in Simple) to use nc/a.b() instead of nc/a.c()
         listOf(
             CardSelftextPreviewTextViewExpandedBindFingerprint,
             SimpleSelftextPreviewTextViewExpandedBindFingerprint
@@ -44,7 +30,7 @@ val imagePostSelftextPatch = bytecodePatch(
                     } == true
                 }
                 if (cIndex != -1) {
-                    replaceInstruction(cIndex, "invoke-static {}, Lnc/a;->b()Lnc/a;")
+                    replaceInstruction(cIndex, "invoke-static {p0, p1}, $EXTENSION_CLASS_DESCRIPTOR->getOptions(Landroid/widget/TextView;Lxa/d;)Lnc/a;")
                 }
             }
         }
