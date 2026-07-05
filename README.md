@@ -5,7 +5,7 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START -->
-> **[v1.5.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.5.0-dev.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;25 patches total
+> **[v1.5.0-dev.3](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.5.0-dev.3)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;25 patches total
 <details>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;8 patches</summary>
 <br>
@@ -19,7 +19,7 @@ Some Morphe patches for apps I use.
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
 | [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
-| [Fix Image Post Selftext](#fix-image-post-selftext) | Makes body text in image posts function like regular selftext posts (selectable text, hyperlinked URLs [WIP]). |  |
+| [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
@@ -41,7 +41,7 @@ Some Morphe patches for apps I use.
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
 | [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
-| [Fix Image Post Selftext](#fix-image-post-selftext) | Makes body text in image posts function like regular selftext posts (selectable text, hyperlinked URLs [WIP]). |  |
+| [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
@@ -63,7 +63,7 @@ Some Morphe patches for apps I use.
 |----------|----------------|-----------|
 | [Fix "Other Discussions"](#fix-other-discussions) | Fixes the "Other Discussions" feature. |  |
 | [Fix "Restore Comment"](#fix-restore-comment) | Fixes the "Restore Comment" feature (requires Sync Ultra) by fetching from an alternative API. Also includes UI changes to make this feature more accessible. |  |
-| [Fix Image Post Selftext](#fix-image-post-selftext) | Makes body text in image posts function like regular selftext posts (selectable text, hyperlinked URLs [WIP]). |  |
+| [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
