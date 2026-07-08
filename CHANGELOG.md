@@ -1,3 +1,13 @@
+## [1.6.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.5.0...v1.6.0) (2026-07-08)
+
+### 🐛 Bug Fixes
+
+* Fix Select text dialog displaying when option is disabled ([44849bf](https://github.com/humzakh/HK-Morphe-Patches/commit/44849bf7fc0aa99c39f5582bc04935d7289af265))
+
+### ✨ New Features
+
+* Add Fix Reddit Video Links patch ([5cd88c2](https://github.com/humzakh/HK-Morphe-Patches/commit/5cd88c202a1414fb24a82250455d568484074cfd))
+
 ## [1.6.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.5.1-dev.1...v1.6.0-dev.1) (2026-07-08)
 
 ## [1.5.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.5.0...v1.5.1-dev.1) (2026-07-08)
