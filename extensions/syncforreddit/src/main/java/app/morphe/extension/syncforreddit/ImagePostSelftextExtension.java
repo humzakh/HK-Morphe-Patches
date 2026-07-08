@@ -28,8 +28,19 @@ public class ImagePostSelftextExtension {
 
         if (isExpandedView(textView)) {
             // Expanded view: apply long click listeners and render markdown
-            applyLongClickListener(textView);
-            textView.setLongClickable(true);
+            boolean isEnabled = true;
+            try {
+                isEnabled = com.laurencedawson.reddit_sync.singleton.SettingsSingleton.x().postsLongPress;
+            } catch (Exception ignored) {}
+            
+            if (isEnabled) {
+                applyLongClickListener(textView);
+                textView.setLongClickable(true);
+            } else {
+                textView.setOnLongClickListener(null);
+                textView.setOnTouchListener(null);
+                textView.setLongClickable(false);
+            }
             return nc.a.b();
         } else {
             // Feed view: completely remove listeners so we don't intercept touches
