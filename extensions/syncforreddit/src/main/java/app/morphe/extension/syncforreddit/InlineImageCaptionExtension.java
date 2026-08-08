@@ -1,5 +1,7 @@
 package app.morphe.extension.syncforreddit;
 
+import android.content.Context;
+
 /**
  * Builds the caption text to show below an inline image, or null if none should be shown.
  *
@@ -23,5 +25,10 @@ public class InlineImageCaptionExtension {
             return null;
         }
         return linkText;
+    }
+
+    /** Opens the tapped inline image, passing its caption through as the viewer's title. */
+    public static boolean openImageWithCaption(Context context, String url, String caption) {
+        return y7.b.c(context, null, null, url, null, caption, null, false, false, false);
     }
 }
