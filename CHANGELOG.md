@@ -1,3 +1,9 @@
+## [1.7.0-dev.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.2...v1.7.0-dev.3) (2026-08-08)
+
+### 🐛 Bug Fixes
+
+* Fix smali parse error in Inline Images Patch ([6579d64](https://github.com/humzakh/HK-Morphe-Patches/commit/6579d6471e33f26f86cd03a028589a7dae302d6e))
+
 ## [1.7.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.1...v1.7.0-dev.2) (2026-08-08)
 
 ### 🐛 Bug Fixes
