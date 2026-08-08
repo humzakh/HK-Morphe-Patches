@@ -1,3 +1,9 @@
+## [1.7.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.1...v1.7.0-dev.2) (2026-08-08)
+
+### 🐛 Bug Fixes
+
+* Add captions to inline images ([f78e10b](https://github.com/humzakh/HK-Morphe-Patches/commit/f78e10bda373cb3f0bb96a022e849175cc2700df)), closes [#56](https://github.com/humzakh/HK-Morphe-Patches/issues/56)
+
 ## [1.7.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.6.0...v1.7.0-dev.1) (2026-08-08)
 
 ### ✨ New Features
