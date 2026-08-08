@@ -1,3 +1,9 @@
+## [1.7.0-dev.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.3...v1.7.0-dev.4) (2026-08-08)
+
+### 🐛 Bug Fixes
+
+* Add caption to full screen image viewer ([f61b7c2](https://github.com/humzakh/HK-Morphe-Patches/commit/f61b7c23dfe9fcd2fc7f381896db9e5d55626d10))
+
 ## [1.7.0-dev.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.2...v1.7.0-dev.3) (2026-08-08)
 
 ### 🐛 Bug Fixes
