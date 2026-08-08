@@ -41,7 +41,7 @@ val inlineImagesPatch = bytecodePatch(
                 (instr as? NarrowLiteralInstruction)?.narrowLiteral == 0.2f.toRawBits()
             }
             check(aspectRatioThresholdIndex != -1) { "Could not find the 0.2f aspect ratio threshold" }
-            replaceInstruction(aspectRatioThresholdIndex, "const v3, $NEW_ASPECT_RATIO_THRESHOLD.toRawBits()")
+            replaceInstruction(aspectRatioThresholdIndex, "const v3, ${NEW_ASPECT_RATIO_THRESHOLD.toRawBits()}")
         }
 
         htmlLinkNodeFingerprint.method.apply {
