@@ -1,3 +1,9 @@
+## [1.7.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.6.0...v1.7.0) (2026-08-08)
+
+### ✨ New Features
+
+* Add Fix Inline Images patch ([95d7ec8](https://github.com/humzakh/HK-Morphe-Patches/commit/95d7ec8fd62d8073f41544e13aeb55eefc22447a)), closes [#55](https://github.com/humzakh/HK-Morphe-Patches/issues/55) [#56](https://github.com/humzakh/HK-Morphe-Patches/issues/56)
+
 ## [1.7.0-dev.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0-dev.3...v1.7.0-dev.4) (2026-08-08)
 
 ### 🐛 Bug Fixes
