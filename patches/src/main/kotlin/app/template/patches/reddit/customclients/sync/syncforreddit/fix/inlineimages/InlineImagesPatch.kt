@@ -7,17 +7,24 @@ import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
 import app.morphe.patcher.extensions.InstructionExtensions.getInstruction
 import app.morphe.patcher.extensions.InstructionExtensions.instructions
+import app.morphe.patcher.extensions.InstructionExtensions.removeInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.replaceInstruction
 import app.morphe.patcher.util.smali.ExternalLabel
 import com.android.tools.smali.dexlib2.Opcode
 import com.android.tools.smali.dexlib2.builder.BuilderOffsetInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.NarrowLiteralInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.instruction.RegisterRangeInstruction
+import com.android.tools.smali.dexlib2.iface.reference.MethodReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
+import com.android.tools.smali.dexlib2.iface.reference.TypeReference
 
 private const val MAX_INLINE_IMAGE_DIMENSION_PX = 8192
 private const val NEW_ASPECT_RATIO_THRESHOLD = 0.05f
-private const val EXTENSION_CLASS_DESCRIPTOR = "Lapp/morphe/extension/syncforreddit/InlineImageCaptionExtension;"
+private const val CAPTION_TEXT_SIZE = 0.75f
+private const val CAPTION_EXTENSION_DESCRIPTOR = "Lapp/morphe/extension/syncforreddit/InlineImageCaptionExtension;"
+private const val CLICKABLE_SPAN_DESCRIPTOR = "Lapp/morphe/extension/syncforreddit/InlineImageClickableSpan;"
 
 val inlineImagesPatch = bytecodePatch(
     name = "Fix inline images",
@@ -42,6 +49,35 @@ val inlineImagesPatch = bytecodePatch(
             }
             check(aspectRatioThresholdIndex != -1) { "Could not find the 0.2f aspect ratio threshold" }
             replaceInstruction(aspectRatioThresholdIndex, "const v3, ${NEW_ASPECT_RATIO_THRESHOLD.toRawBits()}")
+        }
+
+        htmlLinkNodeFingerprint.method.apply {
+            val aspectRatioThresholdIndex = this.instructions.indexOfFirst { instr ->
+                (instr as? NarrowLiteralInstruction)?.narrowLiteral == NEW_ASPECT_RATIO_THRESHOLD.toRawBits()
+            }
+            check(aspectRatioThresholdIndex != -1) { "Could not find the aspect ratio threshold" }
+
+            val imageSpanConstructorIndex = this.instructions.withIndex().first { (index, instr) ->
+                index > aspectRatioThresholdIndex &&
+                    (instr as? ReferenceInstruction)?.reference?.let { ref ->
+                        ref is TypeReference && ref.type == "Lmb/d;"
+                    } == true
+            }.index
+            val imageSpanRegister =
+                (this.getInstruction<ReferenceInstruction>(imageSpanConstructorIndex) as OneRegisterInstruction).registerA
+
+            // swaps the Lmb/d; span for one that opens the image with its caption as the
+            // viewer's title. v1 is free here, v11 is left alone for the append logic below.
+            removeInstructions(imageSpanConstructorIndex, 2)
+            addInstructions(
+                imageSpanConstructorIndex,
+                """
+                    invoke-static {v11}, $CAPTION_EXTENSION_DESCRIPTOR->buildCaption(Ljava/lang/String;)Ljava/lang/String;
+                    move-result-object v1
+                    new-instance v$imageSpanRegister, $CLICKABLE_SPAN_DESCRIPTOR
+                    invoke-direct {v$imageSpanRegister, v2, v1}, $CLICKABLE_SPAN_DESCRIPTOR-><init>(Ljava/lang/String;Ljava/lang/String;)V
+                """.trimIndent()
+            )
         }
 
         htmlLinkNodeFingerprint.method.apply {
@@ -89,7 +125,7 @@ val inlineImagesPatch = bytecodePatch(
                 addInstructionsWithLabels(
                     insertionIndex,
                     """
-                        invoke-static {v11}, $EXTENSION_CLASS_DESCRIPTOR->buildCaption(Ljava/lang/String;)Ljava/lang/String;
+                        invoke-static {v11}, $CAPTION_EXTENSION_DESCRIPTOR->buildCaption(Ljava/lang/String;)Ljava/lang/String;
                         move-result-object v11
                         if-eqz v11, :no_caption
 
@@ -100,7 +136,7 @@ val inlineImagesPatch = bytecodePatch(
                         new-array v0, v0, [Ljava/lang/Object;
 
                         new-instance v1, Landroid/text/style/RelativeSizeSpan;
-                        const/high16 v5, 0x3f400000    # 0.75f
+                        const v5, ${CAPTION_TEXT_SIZE.toRawBits()}
                         invoke-direct {v1, v5}, Landroid/text/style/RelativeSizeSpan;-><init>(F)V
                         const/4 v5, 0x0
                         aput-object v1, v0, v5
@@ -116,6 +152,33 @@ val inlineImagesPatch = bytecodePatch(
                     ExternalLabel("no_caption", returnVoidInstruction)
                 )
             }
+        }
+
+        singleImageActivityBuildFragmentFingerprint.method.apply {
+            val n4CallInstruction = this.instructions.first { instr ->
+                (instr.opcode == Opcode.INVOKE_STATIC || instr.opcode == Opcode.INVOKE_STATIC_RANGE) &&
+                    (instr as ReferenceInstruction).reference.let { ref ->
+                        ref is MethodReference && ref.name == "n4"
+                    }
+            } as RegisterRangeInstruction
+
+            // n4's "title" arg (vStart+5) is hardcoded null; replace it with I0()'s
+            // url_title value so a caption set via url_title actually renders.
+            val titleRegister = n4CallInstruction.startRegister + 5
+
+            val titleArgIndex = this.instructions.indexOfFirst { instr ->
+                instr.opcode == Opcode.CONST_4 && (instr as OneRegisterInstruction).registerA == titleRegister
+            }
+            check(titleArgIndex != -1) { "Could not find the const/4 setting the title register to null" }
+
+            removeInstructions(titleArgIndex, 1)
+            addInstructions(
+                titleArgIndex,
+                """
+                    invoke-virtual {p0}, Lcom/laurencedawson/reddit_sync/ui/activities/media/AbstractImageActivity;->I0()Ljava/lang/String;
+                    move-result-object v$titleRegister
+                """.trimIndent()
+            )
         }
     }
 }
