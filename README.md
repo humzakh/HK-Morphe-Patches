@@ -5,9 +5,9 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START -->
-> **[v1.6.0](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.6.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;28 patches total
+> **[v1.7.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.7.0-dev.1)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;31 patches total
 <details>
-<summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;9 patches</summary>
+<summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;10 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -22,6 +22,7 @@ Some Morphe patches for apps I use.
 | [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix Reddit Video Links](#fix-reddit-video-links) | Fixes reddit video links (reddit.com/link/.../video) so they open in the native video player. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
+| [Fix inline images](#fix-inline-images) | Fixes images in text posts showing as plain links instead of rendering inline. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
@@ -30,7 +31,7 @@ Some Morphe patches for apps I use.
 </details>
 
 <details>
-<summary>📦 Sync for Reddit Pro&nbsp;&nbsp;•&nbsp;&nbsp;9 patches</summary>
+<summary>📦 Sync for Reddit Pro&nbsp;&nbsp;•&nbsp;&nbsp;10 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -45,6 +46,7 @@ Some Morphe patches for apps I use.
 | [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix Reddit Video Links](#fix-reddit-video-links) | Fixes reddit video links (reddit.com/link/.../video) so they open in the native video player. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
+| [Fix inline images](#fix-inline-images) | Fixes images in text posts showing as plain links instead of rendering inline. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
@@ -53,7 +55,7 @@ Some Morphe patches for apps I use.
 </details>
 
 <details>
-<summary>📦 Sync for Reddit Dev&nbsp;&nbsp;•&nbsp;&nbsp;9 patches</summary>
+<summary>📦 Sync for Reddit Dev&nbsp;&nbsp;•&nbsp;&nbsp;10 patches</summary>
 <br>
 
 **🎯 Supported versions:**
@@ -68,6 +70,7 @@ Some Morphe patches for apps I use.
 | [Fix Image Post Selftext](#fix-image-post-selftext) | Fixes selftext in image posts to properly render Markdown. |  |
 | [Fix Reddit Video Links](#fix-reddit-video-links) | Fixes reddit video links (reddit.com/link/.../video) so they open in the native video player. |  |
 | [Fix imgur links](#fix-imgur-links) | Fixes imgur.com/a/ links to properly display in the image viewer. |  |
+| [Fix inline images](#fix-inline-images) | Fixes images in text posts showing as plain links instead of rendering inline. |  |
 | [Fix r/random](#fix-r-random) | Restores random subreddit functionality by fetching from an alternative API. |  |
 | [Predictive back gesture (Reddit Sync)](#predictive-back-gesture-reddit-sync) | Enables the predictive back gesture with fixes for Reddit Sync. |  |
 | [Spoof client](#spoof-client) | Restores functionality of the app by using custom client ID (default included). | • OAuth client ID<br>• Redirect URI<br>• User agent |
