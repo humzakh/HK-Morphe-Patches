@@ -1,3 +1,9 @@
+## [1.7.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.0...v1.7.1-dev.1) (2026-08-09)
+
+### 🐛 Bug Fixes
+
+* Disable SyncPredictiveBackPatch for image views ([6f47775](https://github.com/humzakh/HK-Morphe-Patches/commit/6f4777538b453f8fa3dcf5ce556c254b1aa00464))
+
 ## [1.7.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.6.0...v1.7.0) (2026-08-08)
 
 ### ✨ New Features
