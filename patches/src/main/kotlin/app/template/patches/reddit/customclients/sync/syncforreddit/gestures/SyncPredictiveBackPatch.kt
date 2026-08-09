@@ -3,6 +3,7 @@ package app.template.patches.reddit.customclients.sync.syncforreddit.gestures
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
 
 import app.morphe.patcher.patch.resourcePatch
+import org.w3c.dom.Node
 
 val syncPredictiveBackPatch = resourcePatch(
     name = "Predictive back gesture (Reddit Sync)",
@@ -13,31 +14,34 @@ val syncPredictiveBackPatch = resourcePatch(
 
     execute {
         val flag = "android:enableOnBackInvokedCallback"
-        
+
+        // Activities that should not have the predictive back gesture enabled
+        val excludedActivities = setOf(
+            "com.laurencedawson.reddit_sync.ui.activities.MainActivity",
+            "com.laurencedawson.reddit_sync.ui.activities.media.SingleImageActivity",
+            "com.laurencedawson.reddit_sync.ui.activities.media.MultiImageActivity"
+        )
+
         document("AndroidManifest.xml").use { document ->
-            val application = document.getElementsByTagName("application").item(0)
-            if (application != null) {
-                if (application.attributes.getNamedItem(flag) == null) {
+            fun Node.setFlag(enabled: Boolean) {
+                val existing = attributes.getNamedItem(flag)
+                if (existing == null) {
                     document.createAttributeNS("http://schemas.android.com/apk/res/android", flag).apply {
-                        value = "true"
-                    }.let(application.attributes::setNamedItem)
+                        value = enabled.toString()
+                    }.let(attributes::setNamedItem)
                 } else {
-                    application.attributes.getNamedItem(flag).nodeValue = "true"
+                    existing.nodeValue = enabled.toString()
                 }
             }
+
+            document.getElementsByTagName("application").item(0)?.setFlag(true)
 
             val activities = document.getElementsByTagName("activity")
             for (i in 0 until activities.length) {
                 val node = activities.item(i)
                 val nameAttr = node.attributes.getNamedItem("android:name")?.nodeValue
-                if (nameAttr == "com.laurencedawson.reddit_sync.ui.activities.MainActivity") {
-                    if (node.attributes.getNamedItem(flag) == null) {
-                        document.createAttributeNS("http://schemas.android.com/apk/res/android", flag).apply {
-                            value = "false"
-                        }.let(node.attributes::setNamedItem)
-                    } else {
-                        node.attributes.getNamedItem(flag).nodeValue = "false"
-                    }
+                if (nameAttr in excludedActivities) {
+                    node.setFlag(false)
                 }
             }
         }
