@@ -8,7 +8,7 @@ import org.w3c.dom.Node
 val syncPredictiveBackPatch = resourcePatch(
     name = "Predictive back gesture (Reddit Sync)",
     description = "Enables the predictive back gesture with fixes for Reddit Sync.",
-    default = false
+    default = true
 ) {
     compatibleWith(*SyncForRedditCompatible)
 
