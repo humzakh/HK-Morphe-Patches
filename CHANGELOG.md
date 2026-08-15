@@ -1,3 +1,9 @@
+## [1.8.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.1...v1.8.0-dev.2) (2026-08-15)
+
+### 🐛 Bug Fixes
+
+* Genericized custom feeds ([a53619e](https://github.com/humzakh/HK-Morphe-Patches/commit/a53619e0c67638224388b17f596abbda61313376))
+
 ## [1.8.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.1...v1.8.0-dev.1) (2026-08-14)
 
 ### ✨ New Features
