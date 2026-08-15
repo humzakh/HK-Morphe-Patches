@@ -69,8 +69,8 @@ public class HackerNewsMarkdown {
         return REMAINING_TAG.matcher(text).replaceAll("");
     }
 
-    /** Decodes the html entities Hacker News and Reddit escape their text and urls with. */
-    static String unescape(String text) {
+    /** Decodes the html entities Hacker News escapes its text with. */
+    private static String unescape(String text) {
         return text
                 .replace("&#x27;", "'")
                 .replace("&#x2F;", "/")

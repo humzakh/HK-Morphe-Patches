@@ -1,9 +1,24 @@
-package app.template.patches.reddit.customclients.sync.syncforreddit.customfeeds.hackernews
+package app.template.patches.reddit.customclients.sync.syncforreddit.customfeeds
 
 import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
+
+/**
+ * Names the extension serving this app's feed, which the generic extension constructs on first use.
+ *
+ * Compiled as a method answering nothing, which the patch replaces with the feed it was applied for.
+ */
+internal val feedClassFingerprint = Fingerprint(
+    name = "feedClass",
+    accessFlags = listOf(AccessFlags.PRIVATE, AccessFlags.STATIC),
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    custom = { _, classDef ->
+        classDef.type == "Lapp/morphe/extension/syncforreddit/CustomFeedExtension;"
+    }
+)
 
 /**
  * Builds the url for a page of posts. Called only from the request's constructor, so redirecting it
@@ -84,6 +99,39 @@ internal val copyLinkFingerprint = Fingerprint(
     returnType = "V",
     parameters = listOf("Landroid/content/Context;", "Ljava/lang/CharSequence;", "Z"),
     custom = { _, classDef -> classDef.sourceFile == "RedditHelper.java" }
+)
+
+/**
+ * Copies text to the clipboard, which the share and copy sheets hand a link to directly rather than
+ * through [copyLinkFingerprint].
+ */
+internal val copyTextFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "V",
+    parameters = listOf("Ljava/lang/CharSequence;", "Landroid/content/Context;"),
+    custom = { _, classDef -> classDef.sourceFile == "RedditHelper.java" }
+)
+
+/**
+ * Copies a link to the clipboard, which the sheets offering a comment's link and the links written in
+ * a post use rather than either of the methods above.
+ */
+internal val copyUrlFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "V",
+    parameters = listOf("Landroid/content/Context;", "Ljava/lang/String;"),
+    custom = { _, classDef -> classDef.sourceFile == "RedditHelper.java" }
+)
+
+/**
+ * Hands a link to whatever opens it outside the app, as choosing to open one in a browser does.
+ */
+internal val openExternallyFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "V",
+    parameters = listOf("Landroid/content/Context;", "Ljava/lang/String;"),
+    strings = listOf("Opening link externally: "),
+    custom = { _, classDef -> classDef.sourceFile == "LinkHandler.java" }
 )
 
 /**
@@ -273,17 +321,16 @@ internal val deletableFeedFingerprint = Fingerprint(
 )
 
 /**
- * The address a link written in a post or comment refers to, which tapping one is decided from.
+ * Decides what a link opens, which a link handed to the app from elsewhere is routed through.
  *
- * The method already rewrites the addresses the app writes in short form, so it is where an address
- * is settled before anything is done with it.
+ * A link tapped in a post or comment is settled before it reaches here, but one opened from another
+ * app arrives here directly, so both are taken.
  */
-internal val tappedLinkFingerprint = Fingerprint(
-    accessFlags = listOf(AccessFlags.PUBLIC),
-    returnType = "Ljava/lang/String;",
-    parameters = emptyList(),
-    strings = listOf("TAPPED: "),
-    custom = { _, classDef -> classDef.sourceFile == "CustomUrlSpan.java" }
+internal val openLinkFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "Z",
+    strings = listOf("Was comments", "Was subreddit", "Was reddit user"),
+    custom = { _, classDef -> classDef.sourceFile == "LinkHelper.java" }
 )
 
 /**
@@ -305,3 +352,4 @@ internal val parseMultiredditsNetworkResponseFingerprint = Fingerprint(
     returnType = "Lcom/android/volley/Response;",
     custom = { _, classDef -> classDef.sourceFile == "OAuthMultiredditsRequest.java" }
 )
+
