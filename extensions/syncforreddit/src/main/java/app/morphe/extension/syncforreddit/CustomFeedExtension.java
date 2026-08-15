@@ -355,6 +355,69 @@ public abstract class CustomFeedExtension {
      * to - what an id names is otherwise only known by asking the site, which cannot be done here,
      * since this runs as the link is followed, on the thread the app draws on.
      */
+    /**
+     * How long a link waits for the site to say what it names, before it is opened as a post.
+     *
+     * <p>This is the pause between tapping a link and the thread opening, so it is kept to about what
+     * a single request takes. Overrunning it leaves the link opening as a post, which the comments
+     * response then corrects, rather than leaving the app looking stuck.
+     */
+    private static final int RESOLVE_TIMEOUT_MS = 2_500;
+
+    /**
+     * Whether an id names a comment rather than a post.
+     *
+     * <p>The site numbers posts and comments alike and writes links to both the same way, so the two
+     * are told apart by what the item says it is. What has been served is known already; anything
+     * else is asked about, which is one request.
+     *
+     * <p>This runs as a link is followed, on the thread the app draws on, so the asking is done on
+     * another and waited for briefly. An answer that does not arrive in time leaves the link opening
+     * as a post, which is corrected once the comments are fetched.
+     */
+    private boolean isComment(String id) {
+        if (served.contains("t1_" + id)) {
+            return true;
+        }
+
+        if (served.contains("t3_" + id)) {
+            return false;
+        }
+
+        final String item = id;
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        try {
+            Future<Boolean> asked = executor.submit(new Callable<Boolean>() {
+                @Override
+                public Boolean call() {
+                    return namesComment(item);
+                }
+            });
+
+            Boolean comment = asked.get(RESOLVE_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (comment == null) {
+                return false;
+            }
+
+            // Remembered, so that the same link is not asked about twice.
+            served.add((comment ? "t1_" : "t3_") + id);
+            return comment;
+        } catch (Exception e) {
+            // Opened as a post, which the comments response corrects if it turns out to be a comment.
+            return false;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    /**
+     * Whether the site says an id names a comment, or {@code null} where it could not be read.
+     *
+     * <p>Asked of the site rather than guessed at from the id, which says nothing about what it is.
+     */
+    protected abstract Boolean namesComment(String id);
+
     protected String openLink(String url) {
         if (url == null) {
             return null;
@@ -365,11 +428,12 @@ public abstract class CustomFeedExtension {
             return url;
         }
 
-        if (served.contains("t3_" + id)) {
-            return REDDIT_HOSTS[0] + permalink(id);
-        }
-
-        return REDDIT_HOSTS[0] + threadPermalink(id, id);
+        // A story is opened as the post it is. A comment is named as both the thread and the comment
+        // to show, which opens it at the thread it belongs to and is what the app shows its "single
+        // thread" notice for - so a story must never be named that way.
+        return REDDIT_HOSTS[0] + (isComment(id)
+                ? threadPermalink(id, id)
+                : permalink(id));
     }
 
     /**
@@ -1116,10 +1180,52 @@ public abstract class CustomFeedExtension {
         return feed.isFeedPost(postShownOn(shownOn)) ? feed.feedKey() : name;
     }
 
+    /**
+     * The setting deciding whether the site's own links open in the feed.
+     *
+     * <p>Listed among the app's own "Links opened in app" settings, which are the same choice made
+     * for the kinds of link the app already opens itself.
+     */
+    public static final String OPEN_LINKS_PREFERENCE = "custom_feed_links_preference";
+
+    /**
+     * The screen the setting is shown on, which its settings are kept under.
+     *
+     * <p>Each of the app's settings screens keeps its own, named after the screen itself.
+     */
+    private static final String LINKS_SCREEN = "PreferencesLinksFragment";
+
+    /**
+     * Whether the site's own links are opened in the feed rather than handed on.
+     *
+     * <p>The app is offered for these links by its manifest, which is settled when the patch is
+     * applied and cannot be changed while it is running. So the choice is made here, where a link is
+     * about to be opened: with this off, a link to the site is left to be opened as any other link
+     * is, which is the browser.
+     *
+     * <p>Read from the app's own preferences, which is where the setting is shown and stored, so that
+     * the choice made in settings is the one read here.
+     */
+    private static boolean opensLinks() {
+        try {
+            // Read from the settings of the screen the setting is shown on, which is where the app
+            // keeps the answers given on it. Each screen keeps its own, named after itself, and the
+            // app resolves that to the account's settings or its own as it goes.
+            return t7.z.g(LINKS_SCREEN).getBoolean(OPEN_LINKS_PREFERENCE, true);
+        } catch (Exception e) {
+            // A setting that cannot be read is treated as left on, which is how it is shipped.
+            return true;
+        }
+    }
+
     /** The link to open in place of one of the site's own. */
     public static String linkFor(String url) {
         CustomFeedExtension feed = feed();
-        return feed == null ? url : feed.openLink(url);
+        if (feed == null || !opensLinks()) {
+            return url;
+        }
+
+        return feed.openLink(url);
     }
 
     /** Corrects a link built for this feed's content before it is shared or copied. */
