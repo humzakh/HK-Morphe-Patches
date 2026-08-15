@@ -139,6 +139,18 @@ fun customFeedPatch(
                 return-object v0
 
                 :not_custom_feed
+                move-object/from16 v0, p1
+
+                move-object/from16 v1, p3
+                iget-object v1, v1, ${afterField.definingClass}->${afterField.name}:${afterField.type}
+
+                invoke-static { v0, v1 }, $EXTENSION_CLASS_DESCRIPTOR->buildProfileUrl(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                move-result-object v0
+
+                if-eqz v0, :not_custom_profile
+                return-object v0
+
+                :not_custom_profile
                 nop
             """
         )
