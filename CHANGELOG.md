@@ -1,3 +1,9 @@
+## [1.8.0-dev.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.2...v1.8.0-dev.3) (2026-08-15)
+
+### 🐛 Bug Fixes
+
+* Add custom feed link handling preference ([6a8346f](https://github.com/humzakh/HK-Morphe-Patches/commit/6a8346f1360cb48bf61ea84c97d45720bc7fae16))
+
 ## [1.8.0-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.1...v1.8.0-dev.2) (2026-08-15)
 
 ### 🐛 Bug Fixes
