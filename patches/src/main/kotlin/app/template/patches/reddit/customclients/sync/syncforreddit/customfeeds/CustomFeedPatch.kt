@@ -77,7 +77,7 @@ fun customFeedPatch(
 
     // Offers the app for the site's links opened elsewhere. Applied as part of this patch rather than
     // listed on its own, since it is the same feature from the other side.
-    dependsOn(customFeedLinksPatch(hosts))
+    dependsOn(customFeedLinksPatch(feedName, hosts))
 
     compatibleWith(*SyncForRedditCompatible)
 

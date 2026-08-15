@@ -144,6 +144,22 @@ public class HackerNewsExtension extends CustomFeedExtension {
     }
 
     /**
+     * Whether Hacker News says an id names a comment.
+     *
+     * <p>Every item says what it is, so it is read from the item rather than worked out from what it
+     * hangs from.
+     */
+    @Override
+    protected Boolean namesComment(String id) {
+        try {
+            JSONObject item = fetchItem(Integer.parseInt(id));
+            return item == null ? null : "comment".equals(item.optString("type"));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * The item a Hacker News link refers to, or {@code null} if it refers to none.
      *
      * <p>Matched with or without a scheme, since a link may be written either way.
@@ -349,6 +365,10 @@ public class HackerNewsExtension extends CustomFeedExtension {
             // The comment the thread is opened at, where a comment was linked rather than a story.
             Integer root = null;
             if ("comment".equals(story.optString("type"))) {
+                // Noted as the comment the item says it is, so that opening the same link again names
+                // it as one from the start rather than being settled here a second time.
+                served.add("t1_" + story.optInt("id"));
+
                 List<String> ancestry = ancestryOf(String.valueOf(story.optInt("id")));
 
                 // The item, whatever it hangs from, and the story it belongs to, so a comment always
