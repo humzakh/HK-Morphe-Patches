@@ -1,3 +1,9 @@
+## [1.8.0-dev.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.3...v1.8.0-dev.4) (2026-08-16)
+
+### 🐛 Bug Fixes
+
+* Add HN profiles ([d0c39fa](https://github.com/humzakh/HK-Morphe-Patches/commit/d0c39fa1286cfd8f7faef4be9035709de188ebf8))
+
 ## [1.8.0-dev.3](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.2...v1.8.0-dev.3) (2026-08-15)
 
 ### 🐛 Bug Fixes
