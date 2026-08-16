@@ -921,8 +921,106 @@ public abstract class CustomFeedExtension {
         }
 
         pendingOffset = parseOffset(after);
+
+        // A feed's page is not a profile's, so anything a profile left behind is cleared rather than
+        // left to claim this response.
+        pendingProfile = null;
+        pendingSection = null;
+
         return feed.postsUrl(after, sort);
     }
+
+    // Profiles, which the site's own users are shown as.
+
+    /**
+     * The users whose names have been seen on the site's own content.
+     *
+     * <p>The site and Reddit both have users, and the same name may belong to someone on either, so a
+     * name is only read as one of the site's when it was seen on the site's own content. Names are
+     * noted as that content is served, and the note is what tells the two apart when one is opened.
+     *
+     * <p>Bounded like the ids served, so a long session cannot grow it without limit.
+     */
+    protected static final Set<String> feedAuthors =
+            Collections.synchronizedSet(Collections.newSetFromMap(new LinkedHashMap<String, Boolean>() {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                    return size() > MAX_REMEMBERED_IDS;
+                }
+            }));
+
+    /** Notes a name as belonging to one of the site's users, as its content is served. */
+    protected static void noteAuthor(String author) {
+        if (author != null && !author.isEmpty()) {
+            feedAuthors.add(author);
+        }
+    }
+
+    /**
+     * The user a profile names, where it is one of the site's.
+     *
+     * <p>The app writes a profile as {@code user###<section>###<name>###null}. Only a name seen on
+     * the site's own content is taken, so that a Reddit account of the same name still opens as
+     * itself.
+     *
+     * @param name the profile being opened, in the app's own form.
+     * @return the user, or {@code null} for a Reddit profile.
+     */
+    protected static String profileUserIn(String name) {
+        if (name == null) {
+            return null;
+        }
+
+        String[] parts = name.split("###");
+        if (parts.length < 3 || !"user".equalsIgnoreCase(parts[0])) {
+            return null;
+        }
+
+        String user = parts[2].trim();
+        return feedAuthors.contains(user) ? user : null;
+    }
+
+    /** The part of a profile the app is showing, which is what a page of it lists. */
+    protected static String profileSectionIn(String name) {
+        String[] parts = name == null ? new String[0] : name.split("###");
+        return parts.length < 2 ? "Overview" : parts[1].trim();
+    }
+
+    /** The profile whose page is being listed, carried to where the response is translated. */
+    protected static volatile String pendingProfile;
+
+    /** What part of that profile is being listed. */
+    protected static volatile String pendingSection;
+
+    /**
+     * The url to request for a page of one of the site's users.
+     *
+     * <p>A profile lists its user's own posts and comments through the same request a feed's page is
+     * read with, so it is answered here rather than through a request of its own.
+     *
+     * @param name the profile being listed, in the app's own form.
+     * @param after the pagination cursor, which is the offset into what the user submitted.
+     * @return the url to request, or {@code null} for anything that is not one of the site's users.
+     */
+    public static String buildProfileUrl(String name, String after) {
+        CustomFeedExtension feed = feed();
+        if (feed == null) {
+            return null;
+        }
+
+        String user = profileUserIn(name);
+        if (user == null) {
+            return null;
+        }
+
+        pendingOffset = parseOffset(after);
+        pendingProfile = user;
+        pendingSection = profileSectionIn(name);
+        return feed.userUrl(user);
+    }
+
+    /** The address one of the site's users is read from. */
+    protected abstract String userUrl(String user);
 
     /** The feed to read, given the sort the app is asking for. */
     public static String sortOrDefault(String sort) {

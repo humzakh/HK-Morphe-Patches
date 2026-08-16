@@ -5,6 +5,7 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -136,6 +137,17 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected String placeholderUrl() {
         return API + "maxitem.json";
+    }
+
+    /**
+     * A user, which is what they submitted is named on.
+     *
+     * <p>Hacker News lists what a user submitted on the user itself rather than on a page of its own,
+     * so the page of their posts and comments is taken out of the ids it names.
+     */
+    @Override
+    protected String userUrl(String user) {
+        return API + "user/" + user + ".json";
     }
 
     @Override
@@ -277,9 +289,28 @@ public class HackerNewsExtension extends CustomFeedExtension {
             if (b == ' ' || b == '\n' || b == '\r' || b == '\t') {
                 continue;
             }
-            return b == '[';
+
+            // The story list is the only bare array received here.
+            if (b == '[') {
+                return true;
+            }
+
+            // A user is an object, as many of Reddit's own responses are, so it is recognised by
+            // being the user that was asked for rather than by its shape. Without that, any object
+            // arriving while a profile is open would be read as a page of it.
+            return b == '{' && pendingProfile != null && isUser(data, pendingProfile);
         }
         return false;
+    }
+
+    /** Whether a response is the user that was asked for, rather than some other object. */
+    private static boolean isUser(byte[] data, String user) {
+        try {
+            JSONObject item = new JSONObject(new String(data, "UTF-8"));
+            return user.equals(item.optString("id")) && item.has("submitted");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -291,7 +322,16 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected byte[] toListing(byte[] data, int offset) {
         try {
-            JSONArray ids = new JSONArray(new String(data, "UTF-8"));
+            String body = new String(data, "UTF-8");
+
+            // A profile lists what its user submitted, which Hacker News names on the user rather
+            // than on a page of its own. A feed's page is the story list as it stands.
+            JSONArray ids = body.trim().startsWith("[")
+                    ? new JSONArray(body)
+                    : new JSONObject(body).optJSONArray("submitted");
+            if (ids == null) {
+                return null;
+            }
 
             List<Integer> page = new ArrayList<>();
             for (int i = offset; i < ids.length() && page.size() < PAGE_SIZE; i++) {
@@ -299,6 +339,23 @@ public class HackerNewsExtension extends CustomFeedExtension {
             }
 
             List<JSONObject> stories = fetchItems(page);
+
+            // What a user submitted is their comments as well as their posts, and each says which it
+            // is. The part of the profile being shown decides which of the two are listed.
+            if (pendingProfile != null) {
+                boolean comments = "Comments".equalsIgnoreCase(pendingSection);
+                boolean posts = "Submitted".equalsIgnoreCase(pendingSection);
+
+                if (comments || posts) {
+                    List<JSONObject> shown = new ArrayList<>();
+                    for (JSONObject item : stories) {
+                        if ("comment".equals(item.optString("type")) == comments) {
+                            shown.add(item);
+                        }
+                    }
+                    stories = shown;
+                }
+            }
 
             // Hacker News serves no images, so Reddit is asked what it holds for the same links. One
             // request covers the whole page; stories Reddit has never seen simply go without.
@@ -311,9 +368,18 @@ public class HackerNewsExtension extends CustomFeedExtension {
             }
             Map<String, Preview> thumbnails = thumbnails(links);
 
+            // A comment names only what it hangs from, so the story it was written on is found by
+            // following that up. Those walks are made for the page at once rather than one after
+            // another, which would leave a page of comments as slow as every walk put together.
+            Map<String, JSONObject> commentStories = storiesOf(stories);
+
             JSONArray children = new JSONArray();
             for (JSONObject story : stories) {
-                children.put(toChild(story, thumbnails));
+                // Each item says which it is, so a comment is listed as the comment it is, under the
+                // story it was written on, and everything else as the post it is.
+                children.put("comment".equals(story.optString("type"))
+                        ? toCommentChild(story, commentStories)
+                        : toChild(story, thumbnails));
             }
 
             JSONObject listing = new JSONObject();
@@ -577,6 +643,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
 
             String id = String.valueOf(comment.optInt("id"));
             served.add("t1_" + id);
+            noteAuthor(author);
 
             JSONObject data = new JSONObject();
             data.put("id", id);
@@ -619,6 +686,137 @@ public class HackerNewsExtension extends CustomFeedExtension {
         }
 
         return children;
+    }
+
+    /**
+     * The story an item belongs to, given the item itself.
+     *
+     * <p>Each item says what it is, so a story is recognised as soon as one is read. A comment names
+     * only what it hangs from, which may be another comment, so that is followed up until the story
+     * is reached.
+     *
+     * <p>Takes the item rather than its id, since the caller already has it - reading it again would
+     * be a request spent asking what is already to hand.
+     */
+    private static JSONObject storyOf(JSONObject item) {
+        JSONObject current = item;
+
+        // Bounded, so that an item whose parents cannot be read does not walk forever.
+        for (int step = 0; step < MAX_COMMENT_DEPTH; step++) {
+            if (!"comment".equals(current.optString("type"))) {
+                return current;
+            }
+
+            long parent = current.optLong("parent");
+            if (parent == 0) {
+                return null;
+            }
+
+            current = fetchItem((int) parent);
+            if (current == null) {
+                return null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The story each of a page's comments was written on, by the comment it belongs to.
+     *
+     * <p>Each item says whether it is a comment, so which of them need a story is known without
+     * asking. The walks for a page are made together rather than one comment after another.
+     */
+    private static Map<String, JSONObject> storiesOf(List<JSONObject> items) {
+        List<JSONObject> comments = new ArrayList<>();
+        for (JSONObject item : items) {
+            if ("comment".equals(item.optString("type"))) {
+                comments.add(item);
+            }
+        }
+
+        Map<String, JSONObject> stories = new LinkedHashMap<>();
+        for (JSONObject found : parallel(comments, new Fetcher<JSONObject, JSONObject>() {
+            @Override
+            public JSONObject fetch(JSONObject comment) {
+                JSONObject story = storyOf(comment);
+                if (story == null) {
+                    return null;
+                }
+
+                // Carried back with the comment it was found for, so that each is matched to its own
+                // rather than by position.
+                try {
+                    JSONObject found = new JSONObject();
+                    found.put("comment", String.valueOf(comment.optInt("id")));
+                    found.put("story", story);
+                    return found;
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+        })) {
+            stories.put(found.optString("comment"), found.optJSONObject("story"));
+        }
+        return stories;
+    }
+
+    /**
+     * Maps one of a user's comments onto the Reddit comment fields a profile lists.
+     *
+     * <p>Reddit lists a profile's comments alongside its posts, each named with the post it was
+     * written on, and Sync reads them as comments from the same listing.
+     */
+    private JSONObject toCommentChild(JSONObject comment, Map<String, JSONObject> stories)
+            throws Exception {
+        String id = String.valueOf(comment.optInt("id"));
+
+        JSONObject story = stories.get(id);
+        String storyId = story == null ? null : String.valueOf(story.optInt("id"));
+
+        served.add("t1_" + id);
+        noteAuthor(comment.optString("by", ""));
+
+        String text = comment.optString("text", "");
+
+        JSONObject data = new JSONObject();
+        data.put("id", id);
+        data.put("name", "t1_" + id);
+        data.put("subreddit", subreddit());
+        data.put("subreddit_id", subredditId());
+        data.put("author", comment.optString("by", "[deleted]"));
+        data.put("body", text.isEmpty() ? "" : HackerNewsMarkdown.fromHtml(text));
+        data.put("created_utc", comment.optLong("time"));
+
+        // The post the comment was written on, which the profile names each comment with. A comment
+        // whose story could not be read is still listed, under the site's own name.
+        data.put("link_id", storyId == null ? "" : "t3_" + storyId);
+        data.put("link_title", story == null ? feedName() : story.optString("title", feedName()));
+        data.put("link_author", story == null ? "" : story.optString("by", ""));
+        data.put("link_url", storyId == null ? siteUrl() : REDDIT_HOSTS[0] + permalink(storyId));
+
+        // The address the comment is served under, so that sharing it names the site rather than the
+        // address this patch serves it at.
+        data.put("permalink", itemUrl(id));
+
+        // Hacker News does not expose per comment scores.
+        data.put("score", 1);
+        data.put("score_hidden", true);
+        data.put("likes", JSONObject.NULL);
+        data.put("saved", false);
+        data.put("edited", false);
+        data.put("locked", true);
+        data.put("archived", true);
+        data.put("gilded", 0);
+        data.put("controversiality", 0);
+        data.put("distinguished", JSONObject.NULL);
+        data.put("stickied", false);
+        data.put("num_comments", 0);
+
+        JSONObject child = new JSONObject();
+        child.put("kind", "t1");
+        child.put("data", data);
+        return child;
     }
 
     /** The ids of an item's direct replies. */
@@ -677,6 +875,10 @@ public class HackerNewsExtension extends CustomFeedExtension {
         String selftext = text.isEmpty() ? "" : HackerNewsMarkdown.fromHtml(text);
 
         served.add("t3_" + hnId);
+
+        // Noted as one of the site's users, so that tapping the name opens their profile here rather
+        // than the Reddit account that happens to share it.
+        noteAuthor(story.optString("by", ""));
 
         JSONObject data = new JSONObject();
         data.put("id", hnId);
