@@ -1,3 +1,9 @@
+## [1.8.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.7.1...v1.8.0) (2026-08-16)
+
+### ✨ New Features
+
+* Add Hacker News Feed patch ([9980509](https://github.com/humzakh/HK-Morphe-Patches/commit/9980509a128162cc589de92a96d17467b0ac2d62))
+
 ## [1.8.0-dev.4](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0-dev.3...v1.8.0-dev.4) (2026-08-16)
 
 ### 🐛 Bug Fixes
