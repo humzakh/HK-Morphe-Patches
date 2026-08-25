@@ -198,7 +198,9 @@ public abstract class CustomFeedExtension {
             return false;
         }
 
-        String value = name.trim();
+        // A name read back out of an address carries its space escaped, since a Markdown link would
+        // otherwise end at it.
+        String value = name.trim().replace("%20", " ");
         return value.equalsIgnoreCase(feedKey()) || value.equalsIgnoreCase(feedName());
     }
 
@@ -248,6 +250,14 @@ public abstract class CustomFeedExtension {
     protected abstract boolean isKnownSort(String sort);
 
     /**
+     * The feeds offered in place of Reddit's sorts, in the order they are listed.
+     *
+     * <p>Named the same way the sort dialog names them, since a sort picked here is read back as one
+     * of those.
+     */
+    protected abstract String[] sortLabels();
+
+    /**
      * The icon shown on the chip naming the current feed.
      *
      * @return the drawable to show, or {@code 0} for a sort the app already has an icon for.
@@ -278,6 +288,31 @@ public abstract class CustomFeedExtension {
     /** The title the feed's wiki is shown under, in place of the feed name and page it is read from. */
     protected String wikiTitle() {
         return feedName() + " FAQ";
+    }
+
+    /**
+     * The address of one of the site's pages, by the name a link to it was rewritten under.
+     *
+     * @return the address to request, or {@code null} for a page the feed does not serve.
+     */
+    protected String wikiPageUrl(String page) {
+        return null;
+    }
+
+    /** The title to show for one of those pages, or {@code null} for the wiki's usual title. */
+    protected String wikiPageTitle(String page) {
+        return null;
+    }
+
+    /**
+     * The address to share for one of those pages, which is where it is read on the site.
+     *
+     * <p>Defaults to the address the page is requested from, which for a page served whole is the same
+     * thing. A page holding one section of another names that section, so it is shared as the part of
+     * the page it actually is.
+     */
+    protected String wikiPageShareUrl(String page) {
+        return wikiPageUrl(page);
     }
 
     // Translating what the site answers with into what Sync parses.
@@ -423,6 +458,13 @@ public abstract class CustomFeedExtension {
             return null;
         }
 
+        // One of the site's own pages is opened as the wiki page it is served as, so that following a
+        // link to it stays in the app rather than handing the address to a browser.
+        String page = wikiPageOpened(url);
+        if (page != null) {
+            return page;
+        }
+
         String id = itemIdIn(url);
         if (id == null) {
             return url;
@@ -458,6 +500,13 @@ public abstract class CustomFeedExtension {
                 if (url.startsWith(prefix + siteUrl())) {
                     return url.substring(prefix.length());
                 }
+            }
+
+            // Sharing one of the site's pages builds a wiki address of the feed, which is not a page
+            // Reddit has. The page on the site is shared instead.
+            String page = wikiPageShared(url);
+            if (page != null) {
+                return page;
             }
 
             // Sharing the feed itself builds a reddit.com address from the name it is listed under,
@@ -1045,6 +1094,106 @@ public abstract class CustomFeedExtension {
         return feed != null && feed.isFeed(name);
     }
 
+    /**
+     * The title for the sheet of options shown for a subreddit, which the feed is shown through.
+     *
+     * <p>The sheet is titled for a subreddit, which the feed is not one of, so it is named as the
+     * feed it is. Anything else keeps the title it was given.
+     */
+    public static String optionsTitle(String name, String title) {
+        return isFeedName(name) ? "Feed options" : title;
+    }
+
+    /**
+     * Whether an option belongs in that sheet, which the ones meaning nothing for the feed are left
+     * out of.
+     *
+     * <p>The options left out act on a subreddit through Reddit - its moderators, its flairs and the
+     * custom feeds an account collects subreddits into. None of them has anything to act on here.
+     */
+    public static boolean showsOption(String name, String option) {
+        if (!isFeedName(name)) {
+            return true;
+        }
+
+        for (String hidden : HIDDEN_FEED_OPTIONS) {
+            if (hidden.equals(option)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** The options left off the feed's sheet, named as they are listed. */
+    private static final String[] HIDDEN_FEED_OPTIONS = {
+        "Message mods", "View mods", "Flair", "Add to multi"
+    };
+
+    /**
+     * The title for the dialog offering to override the sort a subreddit is read with.
+     *
+     * <p>Named for the feed rather than for a subreddit, in the same way as the sheet it is opened
+     * from.
+     */
+    public static String sortDialogTitle(String name, String title) {
+        return isFeedName(name) ? "Update feed sort" : title;
+    }
+
+    /**
+     * The sorts to offer for a name, which are the app's own for anything but the feed.
+     *
+     * <p>Reddit's sorts mean nothing for the feed, so the feeds the site serves are offered in their
+     * place - the same ones the sort dialog offers, listed in the same order. Both the labels shown
+     * and the values stored are these names, so what is picked is stored as the sort it is.
+     *
+     * <p>Anything else is answered with the sorts it was read with, so the array is replaced in place
+     * and only the feed is affected.
+     */
+    public static String[] sortOptions(String name, String[] sorts) {
+        CustomFeedExtension feed = feed();
+        return feed != null && feed.isFeed(name) ? feed.sortLabels() : sorts;
+    }
+
+    /**
+     * The sort a stored override refers to, or {@code null} for one of Reddit's own.
+     *
+     * <p>The app stores its sorts as codes it decodes back into a name and a time range, and anything
+     * it does not recognise it reads as "New". The feed's sorts are stored as the names they are, so
+     * they are answered here before that decoding reaches them.
+     */
+    public static String decodeSort(String stored) {
+        CustomFeedExtension feed = feed();
+        return feed != null && feed.isKnownSort(stored) ? stored.trim() : null;
+    }
+
+    /**
+     * The sort to name on the chip, which is the one actually being read for the feed.
+     *
+     * <p>The chip is labelled from the sort the screen holds, which for the feed may be one of
+     * Reddit's that it does not have - the request falls back to the feed's own sort, but nothing
+     * corrects what is shown. The sort actually being read is named here instead, so the chip agrees
+     * with the posts under it.
+     */
+    public static String sortLabel(String name, String sort) {
+        CustomFeedExtension feed = feed();
+        if (feed == null || !feed.isFeed(name)) {
+            return sort;
+        }
+
+        return feed.isKnownSort(sort) ? sort.trim() : feed.defaultSort();
+    }
+
+    /**
+     * The time range to name alongside that sort, which the feed's own sorts have none of.
+     *
+     * <p>Reddit's ranges go with sorts like Top and Controversial, neither of which the feed has, so
+     * naming one next to a feed of the site's would read as a range that was applied.
+     */
+    public static String sortRangeLabel(String name, String range) {
+        return isFeedName(name) ? null : range;
+    }
+
     /** The name of the feed this patch adds, as it is listed. */
     public static String feedNameOf() {
         CustomFeedExtension feed = feed();
@@ -1133,12 +1282,32 @@ public abstract class CustomFeedExtension {
         }
     }
 
-    /** The address to read the feed's wiki from, or {@code null} to leave the request as it is. */
-    public static String faqUrlFor(String name) {
+    /**
+     * The address to read the feed's wiki from, or {@code null} to leave the request as it is.
+     *
+     * <p>The page asked for selects which of the site's pages is served, so that a link from one to
+     * another opens in this same sheet rather than leaving the app. The page a link names is carried
+     * in the wiki address it was rewritten to, and anything else falls back to the site's FAQ.
+     */
+    public static String faqUrlFor(String name, String page) {
         CustomFeedExtension feed = feed();
         pendingFaq = feed != null && feed.isFeed(name);
-        return pendingFaq ? feed.faqUrl() : null;
+        if (!pendingFaq) {
+            return null;
+        }
+
+        pendingWikiPage = page == null ? null : page.trim();
+        String url = feed.wikiPageUrl(pendingWikiPage);
+        return url == null ? feed.faqUrl() : url;
     }
+
+    /**
+     * The page the wiki sheet is showing, which the title and the trimming of its heading follow.
+     *
+     * <p>Held from the request being built to the response being parsed, in the same way as the page
+     * offset for a listing.
+     */
+    protected static volatile String pendingWikiPage;
 
     /** Replaces the wiki response with the site's own page. */
     public static byte[] rewriteWiki(byte[] data) {
@@ -1163,9 +1332,93 @@ public abstract class CustomFeedExtension {
      */
     public static String wikiTitleFor(String title) {
         CustomFeedExtension feed = feed();
-        return feed != null && title != null && title.startsWith(feed.feedKey())
-                ? feed.wikiTitle()
-                : title;
+        // The title is built from the name read out of the address, which carries its space escaped.
+        if (feed == null || title == null || !feed.isFeed(feedNameIn(title))) {
+            return title;
+        }
+
+        // The page is read out of the title rather than from the request, because the sheet titles
+        // itself before it asks for the page - reading it from the request would name whichever page
+        // was asked for last.
+        String page = feed.wikiPageTitle(wikiPageIn(title));
+        return page == null ? feed.wikiTitle() : page;
+    }
+
+    /**
+     * The page a wiki title was built from, which is everything after the name it follows.
+     *
+     * <p>The sheet titles itself with the subreddit and page it is reading, joined by a dash.
+     */
+    private static String wikiPageIn(String title) {
+        int separator = title.indexOf(" - ");
+        return separator == -1 ? null : title.substring(separator + " - ".length()).trim();
+    }
+
+    /**
+     * The wiki address serving one of the site's pages, or {@code null} for any other address.
+     *
+     * <p>The reverse of what is shared: an address on the site is turned back into the wiki page it is
+     * read as, so that opening a link to one shows it in the app.
+     */
+    private String wikiPageOpened(String url) {
+        String name = wikiPageNamed(url);
+        return name == null ? null : wikiAddress(name);
+    }
+
+    /**
+     * The page one of the site's addresses is served as, or {@code null} where it serves none.
+     *
+     * <p>Asked of the feed, which knows the pages it serves and the addresses they are read from.
+     */
+    protected String wikiPageNamed(String url) {
+        return null;
+    }
+
+    /** The wiki address one of the feed's pages is read under. */
+    protected final String wikiAddress(String page) {
+        // The feed's name may hold a space, which would end the address early once it is written as a
+        // Markdown link, so it is escaped the way a url carries one.
+        return REDDIT_HOSTS[0] + "/r/" + feedKey().replace(" ", "%20") + "/wiki/" + page;
+    }
+
+    /**
+     * The site's own address for a wiki page of the feed, or {@code null} for any other address.
+     *
+     * <p>The pages are served as wiki pages of the feed, so a link to one names an address Reddit does
+     * not have. What is shared is the page on the site, which is where it was read from.
+     */
+    private String wikiPageShared(String url) {
+        String marker = "/wiki/";
+        int start = url.indexOf(marker);
+        if (start == -1) {
+            return null;
+        }
+
+        // Only a wiki address of this feed is corrected; every other subreddit's wiki is left alone.
+        String name = url.substring(0, start);
+        int subreddit = name.lastIndexOf("/r/");
+        if (subreddit == -1 || !isFeed(name.substring(subreddit + "/r/".length()))) {
+            return null;
+        }
+
+        String page = url.substring(start + marker.length()).trim();
+        int query = page.indexOf('?');
+        if (query != -1) {
+            page = page.substring(0, query);
+        }
+
+        return wikiPageShareUrl(page);
+    }
+
+    /**
+     * The name a wiki title was built from, which is everything before the page it names.
+     *
+     * <p>The sheet titles itself with the subreddit and page it read, joined by a dash, so the name is
+     * what precedes the first of those.
+     */
+    private static String feedNameIn(String title) {
+        int separator = title.indexOf(" - ");
+        return separator == -1 ? title : title.substring(0, separator);
     }
 
     /**

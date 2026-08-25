@@ -9,6 +9,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Serves Hacker News as if it were a subreddit.
@@ -34,6 +36,9 @@ public class HackerNewsExtension extends CustomFeedExtension {
 
     /** The site's own FAQ, shown as the feed's wiki. */
     private static final String FAQ_URL = NEWS_HOST + "newsfaq.html";
+
+    /** The site's own formatting help, which its pages link to. */
+    private static final String FORMAT_URL = NEWS_HOST + "formatdoc";
 
     /**
      * Hacker News' own icon, the orange "Y".
@@ -216,6 +221,12 @@ public class HackerNewsExtension extends CustomFeedExtension {
                 || value.equalsIgnoreCase("Jobs");
     }
 
+    /** The feeds offered in place of Reddit's sorts, in the order the sort dialog lists them. */
+    @Override
+    protected String[] sortLabels() {
+        return new String[] { "Best", "Hot", "New", "Ask", "Show", "Jobs" };
+    }
+
     /**
      * The feeds Hacker News serves, by the name each is offered under in the sort dialog.
      *
@@ -279,6 +290,159 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected String faqUrl() {
         return FAQ_URL;
+    }
+
+    /**
+     * The pages the wiki sheet serves, by the name links to them are rewritten under.
+     *
+     * <p>The site's pages link to each other, and to sections within themselves, by file name. Those
+     * are rewritten to wiki pages of these names so that following one opens it in this same sheet
+     * rather than handing the address to a browser.
+     */
+    private static final String FAQ_PAGE = "faq";
+    private static final String GUIDELINES_PAGE = "guidelines";
+    private static final String SHOW_PAGE = "showhn";
+    private static final String FORMAT_PAGE = "formatdoc";
+
+    /** The page a subreddit's wiki opens at, which the wiki chip asks for. */
+    private static final String WIKI_INDEX_PAGE = "index";
+
+    /**
+     * The prefix a page naming one section of the FAQ is written under.
+     *
+     * <p>The site links to sections of its FAQ, which a page shown whole has nothing to scroll to. The
+     * section is served as a page of its own instead, so the link lands on what it named.
+     */
+    private static final String SECTION_PREFIX = "faq-";
+
+    @Override
+    protected String wikiPageUrl(String page) {
+        if (GUIDELINES_PAGE.equalsIgnoreCase(page)) {
+            return GUIDELINES_URL;
+        }
+        if (SHOW_PAGE.equalsIgnoreCase(page)) {
+            return SHOW_GUIDELINES_URL;
+        }
+        if (FORMAT_PAGE.equalsIgnoreCase(page)) {
+            return FORMAT_URL;
+        }
+        if (page != null && page.toLowerCase(java.util.Locale.ENGLISH).startsWith(SECTION_PREFIX)) {
+            return FAQ_URL;
+        }
+        // The wiki chip opens the feed's wiki at "index", which is the page every subreddit's wiki
+        // opens at, so that is the FAQ as much as the name it is linked to under.
+        return isFaqPage(page) ? FAQ_URL : null;
+    }
+
+    /** Whether a page names the FAQ, which the wiki opens at under either name. */
+    private static boolean isFaqPage(String page) {
+        return FAQ_PAGE.equalsIgnoreCase(page) || WIKI_INDEX_PAGE.equalsIgnoreCase(page);
+    }
+
+    @Override
+    protected String wikiPageTitle(String page) {
+        if (GUIDELINES_PAGE.equalsIgnoreCase(page)) {
+            return "Hacker News Guidelines";
+        }
+        if (SHOW_PAGE.equalsIgnoreCase(page)) {
+            return "Show HN Rules";
+        }
+        if (FORMAT_PAGE.equalsIgnoreCase(page)) {
+            return "Formatting Options";
+        }
+        return sectionTitle(sectionOf(page));
+    }
+
+    /**
+     * The title for a section of the FAQ, named as the question it answers.
+     *
+     * <p>Titled from here rather than from the heading on the page, because the sheet titles itself
+     * before it has asked for the page. Only the sections the site actually links to are named; any
+     * other is shown under the FAQ's own title.
+     */
+    private static String sectionTitle(String section) {
+        if (section == null) {
+            return null;
+        }
+
+        if (section.equalsIgnoreCase("cflag")) {
+            return "Flagging a comment";
+        }
+        if (section.equalsIgnoreCase("dead")) {
+            return "Dead posts";
+        }
+        if (section.equalsIgnoreCase("ring")) {
+            return "Asking for upvotes";
+        }
+        if (section.equalsIgnoreCase("jobads")) {
+            return "Job ads";
+        }
+        return null;
+    }
+
+    /**
+     * The page one of the site's addresses is served as, so that a link to it opens in the app.
+     *
+     * <p>The section a link names is kept, so that following one lands on what it named in the same
+     * way as a link between the pages themselves.
+     */
+    @Override
+    protected String wikiPageNamed(String url) {
+        String path = url.trim();
+        for (String host : new String[] { NEWS_HOST, NEWS_HOST.replace("https://", "http://") }) {
+            if (path.startsWith(host)) {
+                path = path.substring(host.length());
+                break;
+            }
+        }
+
+        if (path.equals(url.trim())) {
+            return null;
+        }
+
+        String section = null;
+        int hash = path.indexOf('#');
+        if (hash != -1) {
+            section = path.substring(hash + 1);
+            path = path.substring(0, hash);
+        }
+
+        String page;
+        if (path.equals("newsfaq.html")) {
+            page = FAQ_PAGE;
+        } else if (path.equals("newsguidelines.html")) {
+            page = GUIDELINES_PAGE;
+        } else if (path.equals("showhn.html")) {
+            page = SHOW_PAGE;
+        } else if (path.equals("formatdoc")) {
+            page = FORMAT_PAGE;
+        } else {
+            return null;
+        }
+
+        // A section of the FAQ is served as a page of its own, which is what a link naming one opens.
+        return FAQ_PAGE.equals(page) && section != null && !section.isEmpty()
+                ? SECTION_PREFIX + section
+                : page;
+    }
+
+    /** A section is shared as the part of the FAQ it is, which is where it is read on the site. */
+    @Override
+    protected String wikiPageShareUrl(String page) {
+        String section = sectionOf(page);
+        return section == null ? wikiPageUrl(page) : FAQ_URL + "#" + section;
+    }
+
+    /** The section a page names, or {@code null} for a whole page. */
+    private static String sectionOf(String page) {
+        if (page == null) {
+            return null;
+        }
+
+        String value = page.trim();
+        return value.toLowerCase(java.util.Locale.ENGLISH).startsWith(SECTION_PREFIX)
+                ? value.substring(SECTION_PREFIX.length())
+                : null;
     }
 
     /** Whether the body is the Hacker News story id array rather than a Reddit response. */
@@ -492,10 +656,12 @@ public class HackerNewsExtension extends CustomFeedExtension {
     protected byte[] toRules(byte[] data) {
         try {
             boolean show = "Show".equalsIgnoreCase(currentSort);
+            String title = show ? "Show HN Rules" : "Hacker News Guidelines";
 
             JSONObject rule = new JSONObject();
-            rule.put("short_name", show ? "Show HN Guidelines" : "Hacker News Guidelines");
-            rule.put("description", readPage(data));
+            rule.put("short_name", title);
+            // The page opens with its own title, which the heading above it already says.
+            rule.put("description", withoutHeading(readPage(data), show ? "Show HN" : title));
 
             JSONArray rules = new JSONArray();
             rules.put(rule);
@@ -513,12 +679,21 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected byte[] toWiki(byte[] data) {
         try {
-            String page = readPage(data);
+            // The page shown is the one the link asked for, which titles it and names the heading it
+            // opens with. A link to a section of the FAQ is served that section on its own.
+            String section = sectionOf(pendingWikiPage);
+            String page = section == null
+                    ? readPage(data)
+                    : readSection(data, section);
 
-            // The page opens with its own title, which the header above it already says.
-            String heading = "**" + wikiTitle() + "**";
-            if (page.startsWith(heading)) {
-                page = page.substring(heading.length()).trim();
+            // A whole page opens with its own name, which the heading above it already says. A section
+            // opens with the question it answers, which the heading says in shorter words, so that is
+            // dropped too rather than being matched against.
+            if (section == null) {
+                String title = wikiPageTitle(pendingWikiPage);
+                page = withoutHeading(page, title == null ? wikiTitle() : title);
+            } else {
+                page = withoutLeadingHeading(page);
             }
 
             JSONObject content = new JSONObject();
@@ -540,7 +715,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
      * <p>The pages are a table wrapping a run of paragraphs and bold headings, so the cell holding
      * them is taken and converted the same way comment bodies are.
      */
-    private static String readPage(byte[] data) throws Exception {
+    private String readPage(byte[] data) throws Exception {
         String html = new String(data, "UTF-8");
 
         // The page's content sits between the banner image and the footer.
@@ -553,11 +728,34 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // Headings are bold on their own line; make them headings so they stand out when rendered.
         html = html.replaceAll("(?i)<b>(.*?)</b>", "\n\n**$1**\n");
 
+        // The pages link to each other, and to sections within themselves, by file name. Those are
+        // rewritten to the wiki pages this sheet serves them as, so following one opens it here rather
+        // than handing the address to a browser. The section a link named is dropped, since a page is
+        // shown whole and there is nothing to scroll to.
+        //
+        // Done before the remaining relative links are made absolute, so that these are not turned
+        // into addresses off the site instead.
+        // A link naming a section of the FAQ is served that section on its own, so that it lands on
+        // what it named rather than at the top of the whole page. Taken before the links to a page as
+        // a whole, which the same file names would otherwise match.
+        html = linkToWikiSection(html, "newsfaq\\.html");
+        html = linkToWikiSection(html, "");
+
+        html = linkToWikiPage(html, "newsfaq\\.html", FAQ_PAGE);
+        html = linkToWikiPage(html, "newsguidelines\\.html", GUIDELINES_PAGE);
+        html = linkToWikiPage(html, "showhn\\.html", SHOW_PAGE);
+        html = linkToWikiPage(html, "formatdoc", FORMAT_PAGE);
+
         // The pages link to each other by file name, which means nothing once the page is read here.
         // Attributes are quoted with either kind of quote, so both are matched.
         html = html.replaceAll("(?i)href=[\"'](?!https?://)([^\"']+)[\"']", "href=\"" + NEWS_HOST + "$1\"");
 
         String markdown = HackerNewsMarkdown.fromHtml(html);
+
+        // A backslash the page shows as text, such as the one escaping an asterisk in the formatting
+        // help, is read as escaping whatever follows it and disappears. Doubling it leaves one to
+        // read. Done before the escaping below, so the backslashes that adds are not doubled too.
+        markdown = markdown.replace("\\", "\\\\");
 
         // The pages wrap at a fixed width, which can fall inside a link's text. A link is not read as
         // one when its text runs over a line, so those are pulled back onto a single line.
@@ -571,6 +769,133 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // The pages are laid out with blank lines between every element, which read as gaps once the
         // markup is gone.
         return markdown.replaceAll("\n{3,}", "\n\n");
+    }
+
+    /**
+     * Drops the title a page opens with, which the heading above it already says.
+     *
+     * <p>The pages open with their own name as a bold line, and the guidelines follow it with a second
+     * one naming the section, so a run of them is taken rather than only the first.
+     */
+    private static String withoutHeading(String page, String heading) {
+        String text = page;
+        String bold = "**" + heading + "**";
+        if (text.startsWith(bold)) {
+            text = text.substring(bold.length()).trim();
+        }
+        return text;
+    }
+
+    /**
+     * Points the links naming one of the site's pages at the wiki page it is served as.
+     *
+     * <p>The section a link named is dropped along with the file name, since the page is shown whole.
+     *
+     * @param page the file name as a regular expression, which is matched with or without a section.
+     */
+    private String linkToWikiPage(String html, String page, String name) {
+        return html.replaceAll(
+                "(?i)href=[\"']([^\"']*/)?" + page + "(#[^\"']*)?[\"']",
+                "href=\"" + wikiPageAddress(name) + "\"");
+    }
+
+    /**
+     * Reads one section of a page, as the run of markup its heading introduces.
+     *
+     * <p>The sections are marked by an id on the element opening each, so a section is what lies
+     * between its own and the next one. Its heading is kept aside to title the sheet showing it, and
+     * dropped from the text so it is not said twice.
+     *
+     * @param section the id naming the section.
+     * @return that section as Markdown, or the whole page when it holds no such section.
+     */
+    private String readSection(byte[] data, String section) throws Exception {
+        String html = new String(data, "UTF-8");
+
+        Matcher marks = Pattern
+                .compile("(?i)<(?:b|p)[^>]*\\bid=[\"']([^\"']+)[\"'][^>]*>")
+                .matcher(html);
+
+        int start = -1;
+        while (marks.find()) {
+            if (section.equalsIgnoreCase(marks.group(1))) {
+                start = marks.start();
+                break;
+            }
+        }
+
+        if (start == -1) {
+            return readPage(data);
+        }
+
+        // A section runs until the next marked one begins. Not every heading is marked - a question
+        // may be followed by further ones that share its subject, which belong with it - so the end is
+        // the next marked heading, or where a marked paragraph is reached, the heading that introduces
+        // it rather than the paragraph itself.
+        int end = html.length();
+
+        Matcher heading = Pattern
+                .compile("(?i)<b[^>]*\\bid=[\"'][^\"']+[\"'][^>]*>")
+                .matcher(html);
+        if (heading.find(start + 1)) {
+            end = heading.start();
+        }
+
+        Matcher paragraph = Pattern
+                .compile("(?i)<p[^>]*\\bid=[\"'][^\"']+[\"'][^>]*>")
+                .matcher(html);
+        if (paragraph.find(start + 1) && paragraph.start() < end) {
+            end = paragraph.start();
+
+            // The marked paragraph continues the question above it, so that question starts the next
+            // section rather than this one keeping it.
+            Matcher bold = Pattern.compile("(?i)<b\\b[^>]*>").matcher(html);
+            int from = start + 1;
+            while (bold.find(from) && bold.start() < paragraph.start()) {
+                end = bold.start();
+                from = bold.start() + 1;
+            }
+        }
+
+        // Wrapped in the markers the page reader looks for its content between, since a section on its
+        // own carries neither the banner it follows nor the footer it precedes.
+        return readPage(("</a>" + html.substring(start, end) + "</td>").getBytes("UTF-8"));
+    }
+
+    /** Drops whatever bold line a page opens with, whatever it says. */
+    private static String withoutLeadingHeading(String page) {
+        Matcher heading = Pattern.compile("\\A\\*\\*.*?\\*\\*").matcher(page);
+        return heading.lookingAt() ? page.substring(heading.end()).trim() : page;
+    }
+
+    /**
+     * Points the links naming a section of the FAQ at the page serving that section.
+     *
+     * @param page the file name as a regular expression, empty for a link within the page being read.
+     */
+    private String linkToWikiSection(String html, String page) {
+        StringBuffer out = new StringBuffer();
+        Matcher matcher = Pattern
+                .compile("(?i)href=[\"']([^\"']*/)?" + page + "#([A-Za-z0-9_-]+)[\"']")
+                .matcher(html);
+
+        while (matcher.find()) {
+            String address = wikiPageAddress(SECTION_PREFIX + matcher.group(2));
+            matcher.appendReplacement(out, Matcher.quoteReplacement("href=\"" + address + "\""));
+        }
+
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    /**
+     * The address one of the site's pages is served under.
+     *
+     * <p>Written as a wiki address of the feed, which is what the app opens in this sheet: it routes a
+     * link containing both a Reddit host and a wiki path there, and reads the page out of it.
+     */
+    private String wikiPageAddress(String name) {
+        return wikiAddress(name);
     }
 
     /**
