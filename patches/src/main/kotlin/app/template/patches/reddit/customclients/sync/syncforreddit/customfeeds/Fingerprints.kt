@@ -490,3 +490,31 @@ internal val shareOnlyLinkFingerprint = Fingerprint(
     strings = listOf("android.intent.action.SEND", "android.intent.extra.TEXT"),
     custom = { _, classDef -> classDef.sourceFile == "RedditHelper.java" }
 )
+
+/**
+ * Builds the address a save is sent to, which says whether it is a save or the undoing of one.
+ *
+ * The parameters a save is made with name only the item, so which way round it is has to be taken
+ * from here.
+ */
+internal val saveBuildUrlFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "Ljava/lang/String;",
+    parameters = listOf("Landroid/content/Context;", "Z"),
+    strings = listOf("api/save", "api/unsave"),
+    custom = { _, classDef -> classDef.sourceFile == "OAuthSaveRequest.java" }
+)
+
+/**
+ * Builds the settings screen the feed's own settings are listed on.
+ *
+ * The account's details are asked for by rows that show their own input, so they are attached here
+ * once the screen has been built.
+ */
+internal val linksSettingsFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = listOf("Landroid/os/Bundle;", "Ljava/lang/String;"),
+    strings = listOf("default_browser", "bypass_browser"),
+    custom = { _, classDef -> classDef.sourceFile == "PreferencesLinksFragment.java" }
+)

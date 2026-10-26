@@ -38,6 +38,12 @@ private const val EXTENSION_CLASS_DESCRIPTOR =
 private val HIDDEN_OPTIONS = listOf("Message mods", "View mods", "Flair", "Add to multi")
 
 /**
+ * The settings the account's details are kept under, matching the extension's own names and the ones
+ * the account patch lists them by.
+ */
+private val ACCOUNT_SETTINGS = listOf("custom_feed_username", "custom_feed_password")
+
+/**
  * A feed offered in the sort dialog in place of Reddit's sorts, and the drawable it is shown with.
  *
  * The icons are drawables the app already draws in these same dialogs, so none has to be added and
@@ -89,6 +95,10 @@ fun customFeedPatch(
     // Offers the app for the site's links opened elsewhere. Applied as part of this patch rather than
     // listed on its own, since it is the same feature from the other side.
     dependsOn(customFeedLinksPatch(feedName, hosts))
+
+    // Asks for the account the feed's writes are made as, which the site offers no other way of being
+    // acted on by. Applied as part of this patch for the same reason as the links above.
+    dependsOn(customFeedAccountPatch(feedName))
 
     compatibleWith(*SyncForRedditCompatible)
 
@@ -840,6 +850,50 @@ fun customFeedPatch(
                 """
             )
         }
+
+        // Ask for the account's details from the screen they are listed on. They are plain rows, which
+        // the app does not open a dialog for, so each is given the input it asks for its value with
+        // once the screen has been built.
+        //
+        // Each row is found here rather than in the extension: the preference library the app is built
+        // on is obfuscated, so neither the screen nor the method finding a row on it can be named from
+        // there. Both are read from how the method already finds the rows it sets up itself.
+        linksSettingsFingerprint.method.apply {
+            val findPreference = instructions
+                .mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+                .first {
+                    it.parameterTypes.map(CharSequence::toString) ==
+                        listOf("Ljava/lang/CharSequence;") &&
+                        it.returnType == "Landroidx/preference/Preference;"
+                }
+
+            // The method is compiled with no locals of its own, so its parameter registers are all
+            // there is to work in. The screen is the one thing that must survive, and it is passed in
+            // p0, so each row is looked up and handed over before the next one writes over anything -
+            // p0 itself is only read, never written.
+            addInstructions(
+                instructions.count() - 1,
+                ACCOUNT_SETTINGS.joinToString("\n\n") { key ->
+                    """
+                        const-string p1, "$key"
+                        invoke-virtual { p0, p1 }, ${findPreference.definingClass}->${findPreference.name}(${findPreference.parameterTypes[0]})${findPreference.returnType}
+                        move-result-object p1
+
+                        const-string p2, "$key"
+                        invoke-static { p1, p2 }, $EXTENSION_CLASS_DESCRIPTOR->bindAccountSetting(Ljava/lang/Object;Ljava/lang/String;)V
+                    """.trimIndent()
+                }
+            )
+        }
+
+        // Note which way round a save is, which its parameters do not say. p1 is the flag the address
+        // is chosen by, which is set for the undoing of a save.
+        saveBuildUrlFingerprint.method.addInstructions(
+            0,
+            """
+                invoke-static { p1 }, $EXTENSION_CLASS_DESCRIPTOR->noteSave(Z)V
+            """
+        )
 
         // Anything the feed needs beyond what every feed does.
         block()

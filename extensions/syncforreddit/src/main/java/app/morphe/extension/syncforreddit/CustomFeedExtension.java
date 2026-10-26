@@ -645,6 +645,86 @@ public abstract class CustomFeedExtension {
         }
     }
 
+    // The account a feed's writes are made as, which is the feed's own business - the entry points
+    // here are what the patch injects calls to, and each passes to the feed.
+
+    /**
+     * Shows one of the account's details on the row listing it, and asks for it again when tapped.
+     *
+     * @param row the row listing the setting, which the patch finds on the screen.
+     * @param key the setting the row is listing.
+     */
+    public static void bindAccountSetting(Object row, String key) {
+        CustomFeedExtension feed = feed();
+        if (feed != null) {
+            feed.bindSetting(row, key);
+        }
+    }
+
+    /** Shows and asks for one of the account's details, for the feeds that keep one. */
+    protected void bindSetting(Object row, String key) {
+    }
+
+    /**
+     * Notes whether the save being built is a save or the undoing of one.
+     *
+     * <p>The parameters a save is made with name only the item, so which way round it is is taken from
+     * the address as it is built, in the same way as the page offset for a listing.
+     */
+    public static void noteSave(boolean unsave) {
+        CustomFeedExtension feed = feed();
+        if (feed != null) {
+            feed.notedSave(!unsave);
+        }
+    }
+
+    /** Notes which way round the save being built is, for the feeds that make one. */
+    protected void notedSave(boolean saved) {
+    }
+
+    /**
+     * Forgets what the feed read about the account, so that it is read again.
+     *
+     * <p>Called when the feed is opened or refreshed, so that something done to the account elsewhere
+     * is picked up rather than waiting for the app to be restarted.
+     */
+    protected void refreshAccountState() {
+    }
+
+    /** What came of a write made on the site, which the app reports to the user. */
+    public enum WriteResult {
+        /** The site took it. */
+        DONE,
+        /** No account has been given to act as. */
+        NO_ACCOUNT,
+        /** The site refused it, which for a write it otherwise allows means the details are wrong. */
+        REFUSED,
+        /** The site allows this write only for some accounts, such as downvoting. */
+        NOT_ALLOWED,
+        /** The site could not be reached, or answered in a way that could not be read. */
+        FAILED,
+        /** The feed does not offer this at all, having nothing to make the write as. */
+        UNSUPPORTED;
+
+        /** What to tell the user, or {@code null} where there is nothing to say. */
+        public String message(String feedName) {
+            switch (this) {
+                case NO_ACCOUNT:
+                    return "Add your " + feedName + " account in Settings to do that";
+                case REFUSED:
+                    return feedName + " refused that - check your username and password";
+                case NOT_ALLOWED:
+                    return feedName + " does not allow that from this account yet";
+                case FAILED:
+                    return "Could not reach " + feedName;
+                case UNSUPPORTED:
+                    return "Not supported on " + feedName;
+                default:
+                    return null;
+            }
+        }
+    }
+
     // Reading pages, and what Reddit holds for the same links.
 
     /** Reads a url, or {@code null} if it cannot be read. */
@@ -689,6 +769,15 @@ public abstract class CustomFeedExtension {
         }
     }
 
+    /**
+     * The answer to a form sent to a url, which the site's writes are made with.
+     *
+     * <p>Sent as a form rather than as json, which is what the site's own pages post, and answered
+     * without being followed: the site answers a write with a redirect, and where it went is what
+     * says whether the write was taken.
+     *
+     * @return where the site redirected to, or {@code null} if the request could not be made.
+     */
     /**
      * Runs a call for each of a list of items at once, dropping any that fail.
      *
@@ -975,6 +1064,12 @@ public abstract class CustomFeedExtension {
         // left to claim this response.
         pendingProfile = null;
         pendingSection = null;
+
+        // Anything the feed reads about the account rather than about a post is read again when the
+        // feed is opened or refreshed, which is the first page rather than one scrolled onto.
+        if (pendingOffset == 0) {
+            feed.refreshAccountState();
+        }
 
         return feed.postsUrl(after, sort);
     }
@@ -1629,12 +1724,11 @@ public abstract class CustomFeedExtension {
     }
 
     /**
-     * The notice shown above a post's comments, naming the site in place of the archiving a post is
-     * served with.
+     * The notice shown above a post's comments, saying why it cannot be voted on or replied to.
      *
-     * <p>A post is archived so that the app does not offer to vote on or reply to it through Reddit,
-     * which it cannot do. Saying so as "archived" describes the means rather than the reason, so the
-     * notice names where the post is from instead.
+     * <p>A post is archived only while there is no account to act on the site as, which is the reason
+     * the app cannot offer either - so the notice says that rather than describing the archiving,
+     * which is the means.
      */
     public static String noticeFor(String notice, Object post) {
         CustomFeedExtension feed = feed();
@@ -1642,7 +1736,9 @@ public abstract class CustomFeedExtension {
             return notice;
         }
 
-        return notice.replace("an archived post", "a " + feed.feedName() + " post");
+        return notice.replace(
+                "This is an archived post.",
+                "You are not logged into " + feed.feedName() + ".");
     }
 
     /**
@@ -1683,9 +1779,53 @@ public abstract class CustomFeedExtension {
                 return;
             }
 
-            if (feed.isFeedId(id)) {
-                throw new AuthFailureError("Not supported on " + feed.feedName());
+            if (!feed.isFeedId(id)) {
+                continue;
             }
+
+            // The action is carried out on the site rather than being sent to Reddit, which holds
+            // none of this content. The request itself is always failed, so that Volley reports it
+            // through the error listener the action was made with rather than the app believing
+            // Reddit took it - what actually came of it is said in the message.
+            WriteResult result = feed.write(params, id);
+
+            // Said here rather than left to the app, which reports a failed request as its own
+            // wording - the write was made on the site, so what came of it is what should be said.
+            String message = result.message(feed.feedName());
+            if (message != null) {
+                toast(message);
+            }
+
+            throw new AuthFailureError(result == WriteResult.DONE ? DONE_MESSAGE : message);
         }
+    }
+
+    /** Tells the user what came of a write, in the same way the app says anything else. */
+    private static void toast(String message) {
+        try {
+            gb.p.d(message);
+        } catch (Exception e) {
+            // A message that cannot be shown is not worth failing the write over.
+        }
+    }
+
+    /**
+     * Marks a failure the app is told about only so that it stops waiting, the write having been made.
+     *
+     * <p>Every write is failed at the request, since Reddit is not being asked to carry it out, so the
+     * one that succeeded has to be told apart from the ones that did not.
+     */
+    public static final String DONE_MESSAGE = "\u0000done";
+
+    /**
+     * Carries out on the site the write the request was going to ask Reddit for.
+     *
+     * <p>What is being asked for is read from the parameters the request was built with, which name
+     * the item and what is being done to it in the same way for every write.
+     *
+     * @param id the item being acted on, as Reddit's fullname for it.
+     */
+    protected WriteResult write(Map<String, String> params, String id) {
+        return WriteResult.UNSUPPORTED;
     }
 }
