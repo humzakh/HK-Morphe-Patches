@@ -1,3 +1,9 @@
+## [1.9.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.0...v1.9.1-dev.1) (2026-10-29)
+
+### 🐛 Bug Fixes
+
+* Update Niagara weather fingerprints ([278958d](https://github.com/humzakh/HK-Morphe-Patches/commit/278958d4fc86a587ce82964202c0a322e237ce34))
+
 ## [1.9.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.8.0...v1.9.0) (2026-10-27)
 
 ### 🐛 Bug Fixes
