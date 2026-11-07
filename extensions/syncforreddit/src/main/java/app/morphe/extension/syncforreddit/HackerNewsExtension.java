@@ -1,5 +1,7 @@
 package app.morphe.extension.syncforreddit;
 
+import android.util.Log;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -8,6 +10,13 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -57,6 +66,17 @@ public class HackerNewsExtension extends CustomFeedExtension {
     private static final int MAX_COMMENT_DEPTH = 24;
 
     private static final int MAX_COMMENTS = 2000;
+
+    /**
+     * How many comments are requested at once while a thread loads.
+     *
+     * <p>Higher than for a page of stories, since a thread is the one place a request is made per
+     * item by the hundred, and Hacker News' API is served by Firebase, which is built for this.
+     */
+    private static final int COMMENT_THREADS = 48;
+
+    /** The longest a thread is waited on, after which it is shown with what has loaded. */
+    private static final long THREAD_TIMEOUT_MS = 60_000;
 
     /** Counts comments loaded for the thread being parsed, to enforce {@link #MAX_COMMENTS}. */
     private static final AtomicInteger fetched = new AtomicInteger();
@@ -470,7 +490,10 @@ public class HackerNewsExtension extends CustomFeedExtension {
             List<Integer> shown = root == null
                     ? childIds(story)
                     : Collections.singletonList(root);
+            long start = System.currentTimeMillis();
             JSONArray comments = fetchComments(shown, "t3_" + pendingStory, 0);
+            Log.d(LOG_TAG, "Comments: " + Math.min(fetched.get(), MAX_COMMENTS) + " requested in "
+                    + (System.currentTimeMillis() - start) + " ms");
 
             JSONArray response = new JSONArray();
             response.put(listing(postChildren));
@@ -621,20 +644,87 @@ public class HackerNewsExtension extends CustomFeedExtension {
      * Fetches ids and their replies, as Reddit comment objects.
      *
      * <p>Hacker News serves one comment per request, so a thread costs one request per comment rather
-     * than the single request a Reddit thread costs. Each level is fetched concurrently, and the tree
-     * is bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
+     * than the single request a Reddit thread costs. Each comment's replies are asked for as soon as
+     * the comment arrives, rather than a level at a time, so that no request waits on the slowest of
+     * its level; the thread is then put together in the order Hacker News ranks it in. The tree is
+     * bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
      * spend an unbounded number of requests.
      */
     private JSONArray fetchComments(List<Integer> ids, String parent, int depth) throws Exception {
-        JSONArray children = new JSONArray();
+        final Map<Integer, JSONObject> comments = new ConcurrentHashMap<>();
+        final ExecutorService executor = Executors.newFixedThreadPool(COMMENT_THREADS);
+        // Every request in flight is a party, so the thread has loaded once none are left.
+        final Phaser loading = new Phaser(1);
 
-        if (ids.isEmpty() || depth > MAX_COMMENT_DEPTH || fetched.get() >= MAX_COMMENTS) {
-            return children;
+        try {
+            for (Integer id : ids) {
+                fetchComment(id, depth, comments, executor, loading);
+            }
+            loading.awaitAdvanceInterruptibly(
+                    loading.arrive(), THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // Shown with what has loaded, rather than not at all.
+        } finally {
+            executor.shutdownNow();
         }
 
-        for (JSONObject comment : fetchItems(ids)) {
-            if (fetched.incrementAndGet() > MAX_COMMENTS) {
-                break;
+        return buildComments(ids, comments, parent, depth);
+    }
+
+    /** Requests one comment, and then each of its replies as soon as it has arrived. */
+    private static void fetchComment(
+            final int id,
+            final int depth,
+            final Map<Integer, JSONObject> comments,
+            final ExecutorService executor,
+            final Phaser loading
+    ) {
+        if (depth > MAX_COMMENT_DEPTH || fetched.incrementAndGet() > MAX_COMMENTS) {
+            return;
+        }
+
+        loading.register();
+        try {
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject comment = fetchItem(id);
+                        if (comment != null) {
+                            comments.put(id, comment);
+                            for (Integer reply : childIds(comment)) {
+                                fetchComment(reply, depth + 1, comments, executor, loading);
+                            }
+                        }
+                    } finally {
+                        loading.arriveAndDeregister();
+                    }
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // The thread stopped being waited on, so nothing more is asked for.
+            loading.arriveAndDeregister();
+        }
+    }
+
+    /**
+     * Puts fetched comments together into the tree Sync parses, in the order their ids are ranked.
+     *
+     * <p>A comment that was not fetched, because it failed to load or a limit was reached, is left
+     * out along with its replies.
+     */
+    private JSONArray buildComments(
+            List<Integer> ids,
+            Map<Integer, JSONObject> comments,
+            String parent,
+            int depth
+    ) throws Exception {
+        JSONArray children = new JSONArray();
+
+        for (Integer commentId : ids) {
+            JSONObject comment = comments.get(commentId);
+            if (comment == null) {
+                continue;
             }
 
             // Deleted comments keep their replies, which are still worth showing.
@@ -675,7 +765,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
             data.put("distinguished", JSONObject.NULL);
             data.put("stickied", false);
 
-            JSONArray replies = fetchComments(childIds(comment), "t1_" + id, depth + 1);
+            JSONArray replies = buildComments(childIds(comment), comments, "t1_" + id, depth + 1);
             // Reddit sends an empty string rather than an empty listing for a comment with no replies.
             data.put("replies", replies.length() == 0 ? "" : listing(replies));
 
