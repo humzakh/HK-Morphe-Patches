@@ -1,5 +1,7 @@
 package app.morphe.extension.syncforreddit;
 
+import android.util.Log;
+
 import com.android.volley.AuthFailureError;
 
 import org.json.JSONArray;
@@ -127,15 +129,16 @@ public abstract class CustomFeedExtension {
 
     protected static final int TIMEOUT_MS = 10_000;
 
+    /** Matches the number of stories a site typically shows on a page. */
+    protected static final int PAGE_SIZE = 30;
+
     /**
      * How many requests are made at once when a page needs one per item.
      *
-     * <p>Kept small enough to stay polite to a site that serves these without rate limiting.
+     * <p>One per item of a page, so that a page's stories, and the thumbnails for them, each load in
+     * a single round of requests rather than leaving the last few waiting on the rest.
      */
-    protected static final int THREADS = 24;
-
-    /** Matches the number of stories a site typically shows on a page. */
-    protected static final int PAGE_SIZE = 30;
+    protected static final int THREADS = PAGE_SIZE;
 
     // The ids served, which is what tells the feed's content apart from Reddit's.
 
@@ -617,7 +620,14 @@ public abstract class CustomFeedExtension {
 
             if (bearer != null) {
                 connection.setRequestProperty("Authorization", "bearer " + bearer);
-                connection.setRequestProperty("User-Agent", USER_AGENT);
+                connection.setRequestProperty("User-Agent", userAgent);
+            }
+
+            int status = connection.getResponseCode();
+            if (status >= 400) {
+                Log.w(LOG_TAG, "HTTP " + status + " for " + url);
+                connection.disconnect();
+                return null;
             }
 
             InputStream in = connection.getInputStream();
@@ -628,15 +638,19 @@ public abstract class CustomFeedExtension {
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
             }
+            // A connection read to the end is closed but not disconnected, so the next request to the
+            // same host reuses it instead of paying for a new TLS handshake. A thread costs one request
+            // per comment, which makes that handshake most of the time it takes.
             in.close();
 
             return out.toString("UTF-8");
         } catch (Exception e) {
-            return null;
-        } finally {
+            Log.w(LOG_TAG, "Failed to read " + url, e);
+            // A connection left part way through a response cannot be reused, so it is closed.
             if (connection != null) {
                 connection.disconnect();
             }
+            return null;
         }
     }
 
@@ -682,16 +696,90 @@ public abstract class CustomFeedExtension {
         }
     }
 
+    /**
+     * Runs a call for each of a list of items at once, keeping only those that finish within a
+     * shared time budget.
+     *
+     * <p>For lookups that only add to a page, so that the page is not held back by the slowest of
+     * them. Calls still running when the budget is spent are abandoned, and their items left out.
+     */
+    protected static <T, R> List<R> parallel(List<T> items, Fetcher<T, R> fetcher, long budgetMs) {
+        if (items.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(THREADS, items.size()));
+
+        try {
+            List<Future<R>> futures = new ArrayList<>();
+            for (final T item : items) {
+                futures.add(executor.submit(new Callable<R>() {
+                    @Override
+                    public R call() {
+                        return fetcher.fetch(item);
+                    }
+                }));
+            }
+
+            long deadline = System.currentTimeMillis() + budgetMs;
+            List<R> results = new ArrayList<>();
+            for (Future<R> future : futures) {
+                long remaining = deadline - System.currentTimeMillis();
+                try {
+                    R result = remaining > 0
+                            ? future.get(remaining, TimeUnit.MILLISECONDS)
+                            // Out of time, but anything already finished is still taken.
+                            : future.isDone() ? future.get() : null;
+                    if (result != null) {
+                        results.add(result);
+                    }
+                } catch (Exception e) {
+                    // An item that fails or runs out of time is left out rather than failing the page.
+                }
+            }
+            return results;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     /** Fetches one item, for use with {@link #parallel}. */
     public interface Fetcher<T, R> {
         R fetch(T item);
     }
 
-    /** Reddit's index of the links people have submitted, which is where thumbnails come from. */
-    private static final String INFO_URL = "https://oauth.reddit.com/api/info?url=";
+    /**
+     * Reddit's search for the posts linking to a url, which is where thumbnails come from.
+     *
+     * <p>Reddit's index of submitted links, {@code /api/info?url=}, is closed to third party clients
+     * and answers with an html 403 page. Search still finds the posts a link was submitted in, in the
+     * same listing shape.
+     */
+    private static final String SEARCH_URL =
+            "https://oauth.reddit.com/search?type=link&sort=relevance&limit=10&raw_json=1&q=url%3A";
 
-    /** The user agent the app identifies itself to Reddit with. */
-    private static final String USER_AGENT =
+    /**
+     * How long a page waits for its thumbnails.
+     *
+     * <p>Thumbnails only add to a page, so it is shown without the ones Reddit is slow to answer for
+     * rather than held back by them. Those are looked up again the next time the page is loaded.
+     */
+    private static final long THUMBNAIL_BUDGET_MS = 3_000;
+
+    /** Stands for a link Reddit was asked about and holds no thumbnail for. */
+    private static final Preview NO_PREVIEW = new Preview("", "", 0, 0);
+
+    /** Tag the feed's requests are logged under. */
+    protected static final String LOG_TAG = "MorpheCustomFeed";
+
+    /**
+     * The user agent the app identifies itself to Reddit with.
+     *
+     * <p>Read from the app rather than written out, since the token is only accepted alongside the
+     * user agent of the client it was issued to, which a patch spoofing the client changes. The
+     * original is kept until the app has reported its own.
+     */
+    private static volatile String userAgent =
             "android:com.laurencedawson.reddit_sync:vv23.06.30-13:39 (by /u/ljdawson)";
 
     /** The token the current posts request was sent with, used to ask Reddit about the same links. */
@@ -753,25 +841,51 @@ public abstract class CustomFeedExtension {
     protected static Map<String, Preview> thumbnails(List<String> urls) {
         Map<String, Preview> found = new LinkedHashMap<>();
 
-        if (token == null || urls.isEmpty()) {
+        if (urls.isEmpty()) {
             return found;
+        }
+        if (token == null) {
+            Log.w(LOG_TAG, "No token yet, so no thumbnails are looked up");
+            return found;
+        }
+
+        // Links already asked about this session, with or without a thumbnail, are not asked again.
+        List<String> unknown = new ArrayList<>();
+        for (String url : urls) {
+            Preview known = knownThumbnails.get(url);
+            if (known == null) {
+                unknown.add(url);
+            } else if (known != NO_PREVIEW) {
+                found.put(url, known);
+            }
         }
 
         // Reddit answers this for one link at a time, so the page's links are looked up in parallel
         // rather than one after another. Each answer carries the link it belongs to, so that a link
         // Reddit holds nothing for simply drops out without shifting the rest.
-        List<Found> answers = parallel(urls, new Fetcher<String, Found>() {
+        long start = System.currentTimeMillis();
+        List<Found> answers = parallel(unknown, new Fetcher<String, Found>() {
             @Override
             public Found fetch(String url) {
                 Preview preview = previewFor(url);
                 return preview == null ? null : new Found(url, preview);
             }
-        });
+        }, THUMBNAIL_BUDGET_MS);
 
+        int hits = 0;
         for (Found answer : answers) {
-            found.put(answer.url, answer.preview);
+            // Only a definite answer is remembered; a lookup that failed or ran out of time is asked
+            // again next time.
             knownThumbnails.put(answer.url, answer.preview);
+            if (answer.preview != NO_PREVIEW) {
+                found.put(answer.url, answer.preview);
+                hits++;
+            }
         }
+        Log.d(LOG_TAG, "Thumbnails: " + hits + " found, " + (answers.size() - hits) + " none, "
+                + (unknown.size() - answers.size()) + " unanswered of " + unknown.size()
+                + " looked up (" + (urls.size() - unknown.size()) + " cached) in "
+                + (System.currentTimeMillis() - start) + " ms");
         return found;
     }
 
@@ -794,10 +908,39 @@ public abstract class CustomFeedExtension {
                 .replace("&amp;", "&");
     }
 
-    /** The thumbnail Reddit holds for a single link, or {@code null} if it holds none. */
+    /**
+     * Whether two links are to the same page, ignoring the differences Reddit and the site may
+     * disagree on: the scheme, a leading "www.", a trailing slash and the case of the host.
+     */
+    private static boolean sameLink(String a, String b) {
+        return normalizeLink(a).equals(normalizeLink(b));
+    }
+
+    private static String normalizeLink(String link) {
+        String result = unescape(link.trim());
+        int scheme = result.indexOf("://");
+        if (scheme != -1) {
+            result = result.substring(scheme + 3);
+        }
+        int slash = result.indexOf('/');
+        String host = (slash == -1 ? result : result.substring(0, slash)).toLowerCase();
+        String rest = slash == -1 ? "" : result.substring(slash);
+        if (host.startsWith("www.")) {
+            host = host.substring(4);
+        }
+        while (rest.endsWith("/")) {
+            rest = rest.substring(0, rest.length() - 1);
+        }
+        return host + rest;
+    }
+
+    /**
+     * The thumbnail Reddit holds for a single link, {@link #NO_PREVIEW} if it holds none, or
+     * {@code null} if Reddit could not be asked.
+     */
     private static Preview previewFor(String url) {
         try {
-            String body = get(INFO_URL + URLEncoder.encode(url, "UTF-8"), token);
+            String body = get(SEARCH_URL + URLEncoder.encode(url, "UTF-8"), token);
             if (body == null) {
                 return null;
             }
@@ -809,6 +952,12 @@ public abstract class CustomFeedExtension {
             for (int i = 0; i < children.length(); i++) {
                 JSONObject post = children.getJSONObject(i).optJSONObject("data");
                 if (post == null) {
+                    continue;
+                }
+
+                // Search also answers with posts whose links only resemble this one, which would
+                // give the story another page's picture.
+                if (!sameLink(url, post.optString("url", ""))) {
                     continue;
                 }
 
@@ -845,8 +994,9 @@ public abstract class CustomFeedExtension {
 
                 return new Preview(thumbnail, previewUrl, width, height);
             }
+            return NO_PREVIEW;
         } catch (Exception e) {
-            // Treated the same as Reddit holding nothing for the link.
+            // Left unanswered, so the link is asked about again next time.
         }
         return null;
     }
@@ -1400,6 +1550,18 @@ public abstract class CustomFeedExtension {
      */
     public static void noteToken(String value) {
         token = value;
+    }
+
+    /**
+     * Remembers the user agent the app reports, which the token is sent alongside.
+     *
+     * <p>Handed over with the token, since the token is only accepted from the client it was issued
+     * to, which a patch spoofing the client changes.
+     */
+    public static void noteUserAgent(String value) {
+        if (value != null) {
+            userAgent = value;
+        }
     }
 
     /**
