@@ -1,20 +1,28 @@
 package app.morphe.extension.syncforreddit;
 
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
-
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -69,6 +77,17 @@ public class HackerNewsExtension extends CustomFeedExtension {
     private static final int MAX_COMMENT_DEPTH = 24;
 
     private static final int MAX_COMMENTS = 2000;
+
+    /**
+     * How many comments are requested at once while a thread loads.
+     *
+     * <p>Higher than for a page of stories, since a thread is the one place a request is made per
+     * item by the hundred, and Hacker News' API is served by Firebase, which is built for this.
+     */
+    private static final int COMMENT_THREADS = 48;
+
+    /** The longest a thread is waited on, after which it is shown with what has loaded. */
+    private static final long THREAD_TIMEOUT_MS = 60_000;
 
     /** Counts comments loaded for the thread being parsed, to enforce {@link #MAX_COMMENTS}. */
     private static final AtomicInteger fetched = new AtomicInteger();
@@ -646,9 +665,6 @@ public class HackerNewsExtension extends CustomFeedExtension {
 
             fetched.set(0);
 
-            // The working space for the thread about to be read, which is only this response's.
-            thread.clear();
-
             // Only the thread the linked comment belongs to is served, which is what the app shows a
             // link to a Reddit comment as. It is served from the top of that thread rather than from
             // the comment itself, so that every comment in it sits at the depth it belongs to and the
@@ -656,7 +672,10 @@ public class HackerNewsExtension extends CustomFeedExtension {
             List<Integer> shown = root == null
                     ? childIds(story)
                     : Collections.singletonList(root);
+            long start = System.currentTimeMillis();
             JSONArray comments = fetchComments(shown, "t3_" + pendingStory, 0);
+            Log.d(LOG_TAG, "Comments: " + Math.min(fetched.get(), MAX_COMMENTS) + " requested in "
+                    + (System.currentTimeMillis() - start) + " ms");
 
             JSONArray response = new JSONArray();
             response.put(listing(postChildren));
@@ -968,88 +987,87 @@ public class HackerNewsExtension extends CustomFeedExtension {
      * Fetches ids and their replies, as Reddit comment objects.
      *
      * <p>Hacker News serves one comment per request, so a thread costs one request per comment rather
-     * than the single request a Reddit thread costs. The whole thread is read a level at a time, and
-     * the tree is bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large
-     * thread cannot spend an unbounded number of requests.
+     * than the single request a Reddit thread costs. Each comment's replies are asked for as soon as
+     * the comment arrives, rather than a level at a time, so that no request waits on the slowest of
+     * its level; the thread is then put together in the order Hacker News ranks it in. The tree is
+     * bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
+     * spend an unbounded number of requests.
      */
     private JSONArray fetchComments(List<Integer> ids, String parent, int depth) throws Exception {
-        readThread(ids, depth);
-        return buildComments(ids, parent, depth);
+        final Map<Integer, JSONObject> comments = new ConcurrentHashMap<>();
+        final ExecutorService executor = Executors.newFixedThreadPool(COMMENT_THREADS);
+        // Every request in flight is a party, so the thread has loaded once none are left.
+        final Phaser loading = new Phaser(1);
+
+        try {
+            for (Integer id : ids) {
+                fetchComment(id, depth, comments, executor, loading);
+            }
+            loading.awaitAdvanceInterruptibly(
+                    loading.arrive(), THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // Shown with what has loaded, rather than not at all.
+        } finally {
+            executor.shutdownNow();
+        }
+
+        return buildComments(ids, comments, parent, depth);
     }
 
-    /**
-     * Reads a thread into {@link #thread}, a level at a time.
-     *
-     * <p>Every comment sitting at one depth is asked for in a single batch, rather than a comment's
-     * replies being asked for as it is reached. Both cost the same number of requests, but a thread
-     * is deep and narrow - a comment usually has one or two replies - so asking per comment spends
-     * its requests in a long chain of small batches, each waiting for the one before it. Asking per
-     * level makes the chain as long as the thread is deep rather than as long as it is large, which
-     * is what the wait is on a connection whose latency outweighs its bandwidth.
-     */
-    private void readThread(List<Integer> ids, int depth) {
-        List<Integer> level = ids;
+    /** Requests one comment, and then each of its replies as soon as it has arrived. */
+    private static void fetchComment(
+            final int id,
+            final int depth,
+            final Map<Integer, JSONObject> comments,
+            final ExecutorService executor,
+            final Phaser loading
+    ) {
+        if (depth > MAX_COMMENT_DEPTH || fetched.incrementAndGet() > MAX_COMMENTS) {
+            return;
+        }
 
-        for (int at = depth; at <= MAX_COMMENT_DEPTH && !level.isEmpty(); at++) {
-            // Only what has not already been read is asked for, so that a comment reached twice is
-            // not fetched twice.
-            List<Integer> missing = new ArrayList<>();
-            for (Integer id : level) {
-                if (!thread.containsKey(id)) {
-                    missing.add(id);
+        loading.register();
+        try {
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject comment = fetchItem(id);
+                        if (comment != null) {
+                            comments.put(id, comment);
+                            for (Integer reply : childIds(comment)) {
+                                fetchComment(reply, depth + 1, comments, executor, loading);
+                            }
+                        }
+                    } finally {
+                        loading.arriveAndDeregister();
+                    }
                 }
-            }
-
-            for (JSONObject comment : fetchItems(missing)) {
-                thread.put(comment.optInt("id"), comment);
-            }
-
-            // The next level is every reply to everything on this one, which is what makes the batch
-            // wide enough to be worth asking for at once.
-            List<Integer> next = new ArrayList<>();
-            for (Integer id : level) {
-                JSONObject comment = thread.get(id);
-                if (comment != null) {
-                    next.addAll(childIds(comment));
-                }
-            }
-
-            // Bounded by the same count the tree is built under, so that a thread larger than is
-            // shown is not read in full first.
-            if (thread.size() >= MAX_COMMENTS) {
-                return;
-            }
-
-            level = next;
+            });
+        } catch (RejectedExecutionException e) {
+            // The thread stopped being waited on, so nothing more is asked for.
+            loading.arriveAndDeregister();
         }
     }
 
     /**
-     * The comments of the thread being served, as they were read.
+     * Puts fetched comments together into the tree Sync parses, in the order their ids are ranked.
      *
-     * <p>Held while the one response is built, so that a level read in one batch can be assembled
-     * into the tree the app is given. Cleared as each thread starts, since it is only the working
-     * space for that response.
+     * <p>A comment that was not fetched, because it failed to load or a limit was reached, is left
+     * out along with its replies.
      */
-    private final Map<Integer, JSONObject> thread = new java.util.HashMap<>();
-
-    /** Builds the comment tree out of what {@link #readThread} has already read. */
-    private JSONArray buildComments(List<Integer> ids, String parent, int depth) throws Exception {
+    private JSONArray buildComments(
+            List<Integer> ids,
+            Map<Integer, JSONObject> comments,
+            String parent,
+            int depth
+    ) throws Exception {
         JSONArray children = new JSONArray();
 
-        if (ids.isEmpty() || depth > MAX_COMMENT_DEPTH || fetched.get() >= MAX_COMMENTS) {
-            return children;
-        }
-
-        for (Integer at : ids) {
-            JSONObject comment = thread.get(at);
-            // A comment that could not be read is skipped, as one that failed to load always was.
+        for (Integer commentId : ids) {
+            JSONObject comment = comments.get(commentId);
             if (comment == null) {
                 continue;
-            }
-
-            if (fetched.incrementAndGet() > MAX_COMMENTS) {
-                break;
             }
 
             // Deleted comments keep their replies, which are still worth showing.
@@ -1092,7 +1110,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
             data.put("distinguished", JSONObject.NULL);
             data.put("stickied", false);
 
-            JSONArray replies = buildComments(childIds(comment), "t1_" + id, depth + 1);
+            JSONArray replies = buildComments(childIds(comment), comments, "t1_" + id, depth + 1);
             // Reddit sends an empty string rather than an empty listing for a comment with no replies.
             data.put("replies", replies.length() == 0 ? "" : listing(replies));
 

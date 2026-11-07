@@ -5,7 +5,22 @@ Some Morphe patches for apps I use.
 ## Patches list
 
 <!-- PATCHES_START -->
-> **[v1.8.0](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.8.0)**&nbsp;&nbsp;•&nbsp;&nbsp;`main`&nbsp;&nbsp;•&nbsp;&nbsp;34 patches total
+> **[v1.9.1-dev.2](https://github.com/humzakh/HK-Morphe-Patches/releases/tag/v1.9.1-dev.2)**&nbsp;&nbsp;•&nbsp;&nbsp;`dev`&nbsp;&nbsp;•&nbsp;&nbsp;35 patches total
+<details>
+<summary>📦 Niagara Launcher&nbsp;&nbsp;•&nbsp;&nbsp;1 patch</summary>
+<br>
+
+**🎯 Supported versions:**
+
+| 1.16.34 |
+| :---: |
+
+| 💊&nbsp;Patch | 📜&nbsp;Description | ⚙️&nbsp;Options |
+|----------|----------------|-----------|
+| [Apple WeatherKit](#apple-weatherkit) | Fetches weather from Apple WeatherKit in place of Niagara's weather service. Requires a WeatherKit key. | • Team ID<br>• Key ID<br>• Services ID<br>• Private key |
+
+</details>
+
 <details>
 <summary>📦 Sync for Reddit&nbsp;&nbsp;•&nbsp;&nbsp;11 patches</summary>
 <br>

@@ -24,10 +24,16 @@ val otherDiscussionsPatch = bytecodePatch(
                 ref?.string == "submit.json?url="
             }
 
+            // Reddit has closed api/info to third party clients (it answers with an html 403), so the
+            // posts linking to the url are found through search instead. The link is appended after
+            // this, and paging after that, so the query is left last.
             if (submitMatch != null) {
                 val instr = getInstruction<ReferenceInstruction>(submitMatch.index)
                 val targetRegister = (instr as OneRegisterInstruction).registerA
-                replaceInstruction(submitMatch.index, "const-string v${targetRegister}, \"api/info?url=\"")
+                replaceInstruction(
+                    submitMatch.index,
+                    "const-string v${targetRegister}, \"search?type=link&sort=new&limit=100&q=url:\""
+                )
             }
 
             val instructions = this.implementation?.instructions?.toList() ?: emptyList()

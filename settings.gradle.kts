@@ -17,8 +17,9 @@ pluginManagement {
 }
 
 plugins {
-    id("app.morphe.patches") version "1.3.2"
+    id("app.morphe.patches") version "2.1.0"
 }
 
 include(":extensions:syncforreddit")
 include(":extensions:syncforreddit:stubs")
+include(":extensions:niagara")

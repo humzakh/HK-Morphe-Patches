@@ -1,6 +1,7 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.customfeeds
 
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+import app.template.patches.reddit.customclients.sync.syncforreddit.api.getUserAgentFingerprint
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
@@ -191,6 +192,11 @@ fun customFeedPatch(
                 .mapNotNull { (it as? ReferenceInstruction)?.reference as? FieldReference }
                 .first { it.type == "Ljava/lang/String;" }
 
+            // The token belongs to whichever client the app signs in as, which another patch may have
+            // changed, so the user agent sent with it is the one the app itself reports rather than a
+            // copy of the original.
+            val userAgentMethod = getUserAgentFingerprint.method
+
             // The method declares enough locals to push "this" out of the range the four bit register
             // forms can address, so it is moved down before the field is read off it.
             addInstructions(
@@ -199,6 +205,10 @@ fun customFeedPatch(
                     move-object/from16 v0, p0
                     iget-object v0, v0, ${tokenField.definingClass}->${tokenField.name}:${tokenField.type}
                     invoke-static { v0 }, $EXTENSION_CLASS_DESCRIPTOR->noteToken(Ljava/lang/String;)V
+
+                    invoke-static { }, ${userAgentMethod.definingClass}->${userAgentMethod.name}()Ljava/lang/String;
+                    move-result-object v0
+                    invoke-static { v0 }, $EXTENSION_CLASS_DESCRIPTOR->noteUserAgent(Ljava/lang/String;)V
                 """
             )
         }
