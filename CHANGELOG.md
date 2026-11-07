@@ -1,3 +1,9 @@
+## [1.9.1-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.1-dev.1...v1.9.1-dev.2) (2026-11-07)
+
+### 🐛 Bug Fixes
+
+* Update Hacker News and Other Discussions patches ([8dee21f](https://github.com/humzakh/HK-Morphe-Patches/commit/8dee21fb1217f26feaeae9c9758f6fb0f1207416))
+
 ## [1.9.1-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.0...v1.9.1-dev.1) (2026-10-29)
 
 ### 🐛 Bug Fixes
