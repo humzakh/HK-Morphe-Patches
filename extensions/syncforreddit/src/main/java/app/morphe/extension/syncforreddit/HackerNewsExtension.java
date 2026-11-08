@@ -11,6 +11,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -646,22 +648,26 @@ public class HackerNewsExtension extends CustomFeedExtension {
                 pendingStory = storyId;
             }
 
-            JSONArray postChildren = new JSONArray();
-
+            // What the account has done is read while the comments load, rather than before them,
+            // since it is only needed once the post and its comments are written out.
+            //
             // The account's listings are read first, so that the post's own page is read after them
             // and what it says is what stands - they are replaced wholesale as they are read, which
             // would otherwise put back what the post's page had just corrected.
-            readAccountListings();
-
+            //
             // What the account has done to this post is then read from its own page, rather than being
             // taken from those listings: a post is opened one at a time, so asking about it costs a
             // single request, and it is right even where it was voted on or saved elsewhere since the
             // feed was last refreshed. Its comments are on the same page, so their votes come too.
-            readSaved(String.valueOf(story.optInt("id")));
-
-            // Opening a post rewrites its row, so the thumbnail found when the post list was built is
-            // reused; without it the row would be rewritten with none.
-            postChildren.put(toChild(story, knownThumbnails));
+            final String storyId = String.valueOf(story.optInt("id"));
+            ExecutorService accountReader = Executors.newSingleThreadExecutor();
+            Future<?> accountState = accountReader.submit(new Runnable() {
+                @Override
+                public void run() {
+                    readAccountListings();
+                    readSaved(storyId);
+                }
+            });
 
             fetched.set(0);
 
@@ -673,9 +679,27 @@ public class HackerNewsExtension extends CustomFeedExtension {
                     ? childIds(story)
                     : Collections.singletonList(root);
             long start = System.currentTimeMillis();
-            JSONArray comments = fetchComments(shown, "t3_" + pendingStory, 0);
+            Map<Integer, JSONObject> loaded;
+            try {
+                loaded = loadComments(shown, 0);
+
+                try {
+                    accountState.get(THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    // Shown with what was already known about the account, rather than not at all.
+                }
+            } finally {
+                accountReader.shutdownNow();
+            }
             Log.d(LOG_TAG, "Comments: " + Math.min(fetched.get(), MAX_COMMENTS) + " requested in "
                     + (System.currentTimeMillis() - start) + " ms");
+
+            // Opening a post rewrites its row, so the thumbnail found when the post list was built is
+            // reused; without it the row would be rewritten with none.
+            JSONArray postChildren = new JSONArray();
+            postChildren.put(toChild(story, knownThumbnails));
+
+            JSONArray comments = buildComments(shown, loaded, "t3_" + pendingStory, 0);
 
             JSONArray response = new JSONArray();
             response.put(listing(postChildren));
@@ -984,16 +1008,16 @@ public class HackerNewsExtension extends CustomFeedExtension {
     }
 
     /**
-     * Fetches ids and their replies, as Reddit comment objects.
+     * Fetches ids and their replies, by id, for {@link #buildComments} to put together.
      *
      * <p>Hacker News serves one comment per request, so a thread costs one request per comment rather
      * than the single request a Reddit thread costs. Each comment's replies are asked for as soon as
      * the comment arrives, rather than a level at a time, so that no request waits on the slowest of
-     * its level; the thread is then put together in the order Hacker News ranks it in. The tree is
+     * its level. The tree is
      * bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
      * spend an unbounded number of requests.
      */
-    private JSONArray fetchComments(List<Integer> ids, String parent, int depth) throws Exception {
+    private Map<Integer, JSONObject> loadComments(List<Integer> ids, int depth) throws Exception {
         final Map<Integer, JSONObject> comments = new ConcurrentHashMap<>();
         final ExecutorService executor = Executors.newFixedThreadPool(COMMENT_THREADS);
         // Every request in flight is a party, so the thread has loaded once none are left.
@@ -1011,7 +1035,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
             executor.shutdownNow();
         }
 
-        return buildComments(ids, comments, parent, depth);
+        return comments;
     }
 
     /** Requests one comment, and then each of its replies as soon as it has arrived. */
@@ -1411,25 +1435,50 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // A failed read is not asked for again here. These are read once per refresh but asked about
         // once per item, so retrying on the spot would sign in and re-read the listings for every
         // post in the feed while the site kept saying no. The next refresh asks again instead.
-        Set<String> read = new java.util.HashSet<String>();
-        if (readFavoritesInto(read)) {
+        //
+        // The site lists what the account has upvoted in the same way as its favourites, so those are
+        // read here too and every post in a listing shows its arrow without its page having to be
+        // opened.
+        //
+        // The four listings are read at the same time rather than one after another. Each is its own
+        // chain of pages, read a page at a time behind its "More" link, so that is the most the reads
+        // can overlap. Signed in first, so that the four do not each sign in at once.
+        if (session() == null) {
+            return;
+        }
+
+        List<String> listings = Arrays.asList(
+                favoritesUrl(false), favoritesUrl(true), upvotedUrl(false), upvotedUrl(true));
+        final Map<String, Set<String>> readFrom = new ConcurrentHashMap<>();
+        parallel(listings, new Fetcher<String, Boolean>() {
+            @Override
+            public Boolean fetch(String url) {
+                Set<String> read = new java.util.HashSet<String>();
+                if (!readListingInto(url, read)) {
+                    return null;
+                }
+                readFrom.put(url, read);
+                return Boolean.TRUE;
+            }
+        }, THREAD_TIMEOUT_MS);
+
+        Set<String> favoritePosts = readFrom.get(favoritesUrl(false));
+        Set<String> favoriteComments = readFrom.get(favoritesUrl(true));
+        if (favoritePosts != null && favoriteComments != null) {
             synchronized (favorites) {
                 favorites.clear();
-                favorites.addAll(read);
+                favorites.addAll(favoritePosts);
+                favorites.addAll(favoriteComments);
             }
         }
 
-        // The site lists what the account has upvoted in the same way, so those are read here too and
-        // every post in a listing shows its arrow without its page having to be opened.
-        Set<String> upvoted = new java.util.HashSet<String>();
-        boolean upvotesRead = true;
-        for (boolean comments : new boolean[] { false, true }) {
-            upvotesRead &= readListingInto(upvotedUrl(comments), upvoted);
-        }
-
-        if (!upvotesRead) {
+        Set<String> upvotedPosts = readFrom.get(upvotedUrl(false));
+        Set<String> upvotedComments = readFrom.get(upvotedUrl(true));
+        if (upvotedPosts == null || upvotedComments == null) {
             return;
         }
+        Set<String> upvoted = new java.util.HashSet<String>(upvotedPosts);
+        upvoted.addAll(upvotedComments);
 
         synchronized (votes) {
             // Only the upvotes read here are replaced. A downvote is not listed anywhere, so one noted
@@ -1460,22 +1509,6 @@ public class HackerNewsExtension extends CustomFeedExtension {
 
         // The votes are read again along with the favourites, so what was read before is left in place
         // rather than being cleared here - it is replaced as the listings are read.
-    }
-
-    /**
-     * Reads the account's favourites, replacing what was read before rather than adding to it.
-     *
-     * <p>Replaced rather than added to, so that a favourite taken away on the site itself stops being
-     * shown as one here.
-     *
-     * @return whether both of the listings were read, so that what they hold stands for all of them.
-     */
-    private static boolean readFavoritesInto(Set<String> read) {
-        boolean complete = true;
-        for (boolean comments : new boolean[] { false, true }) {
-            complete &= readListingInto(favoritesUrl(comments), read);
-        }
-        return complete;
     }
 
     /**
