@@ -1,3 +1,9 @@
+## [1.10.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.1-dev.2...v1.10.0-dev.1) (2026-11-08)
+
+### ✨ New Features
+
+* Add Hacker News account functionality ([e4025f4](https://github.com/humzakh/HK-Morphe-Patches/commit/e4025f46bb544a9cb09716211e16a37b88138149))
+
 ## [1.9.1-dev.2](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.1-dev.1...v1.9.1-dev.2) (2026-11-07)
 
 ### 🐛 Bug Fixes
