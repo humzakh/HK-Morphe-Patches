@@ -3,6 +3,7 @@ package app.template.patches.reddit.customclients.sync.syncforreddit.customfeeds
 import app.morphe.patcher.Fingerprint
 import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
+import com.android.tools.smali.dexlib2.iface.reference.FieldReference
 import com.android.tools.smali.dexlib2.iface.reference.StringReference
 
 /**
@@ -353,3 +354,167 @@ internal val parseMultiredditsNetworkResponseFingerprint = Fingerprint(
     custom = { _, classDef -> classDef.sourceFile == "OAuthMultiredditsRequest.java" }
 )
 
+
+/**
+ * Fills in the chip offering to join the subreddit being shown, which is also the only place the chip
+ * is made visible.
+ *
+ * The feed is shown through the same chips a subreddit is, since it is treated as one for the sake of
+ * its icon, and so is offered this chip. Reddit has nothing to join here, so it is left off.
+ */
+internal val joinChipFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = emptyList(),
+    strings = listOf("Joined", "Join"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditChipGroup.java" }
+)
+
+/**
+ * Fills in the chip offering the subreddit's post flairs, which is also the only place that chip is
+ * made visible.
+ *
+ * Matched by the chip it is the only method to fill in: it holds no strings of its own, and the one
+ * other method touching that chip is the one hiding every chip at once, which touches several.
+ */
+internal val flairChipFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = emptyList(),
+    custom = { method, classDef ->
+        classDef.sourceFile == "PlainSubredditChipGroup.java" &&
+            method.implementation?.instructions
+                ?.mapNotNull { (it as? ReferenceInstruction)?.reference as? FieldReference }
+                ?.filter { it.definingClass == classDef.type }
+                ?.distinct()
+                ?.let { fields -> fields.size == 1 && fields.single().name == "chipFlair" } == true
+    }
+)
+
+/**
+ * Fills in the chip offering to watch the subreddit, which is also the only place that chip is made
+ * visible.
+ */
+internal val watchChipFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = emptyList(),
+    strings = listOf("Watching", "Watch"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditChipGroup.java" }
+)
+
+/**
+ * Titles the sheet of options shown for a subreddit, which the feed is shown through.
+ */
+internal val subredditOptionsTitleFingerprint = Fingerprint(
+    name = "getTitle",
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "Ljava/lang/String;",
+    parameters = emptyList(),
+    strings = listOf("Subreddit options"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditMoreDialogBottomSheet.java" }
+)
+
+/**
+ * Builds the options listed in that sheet, each of which is registered as it is built.
+ */
+internal val subredditOptionsFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = emptyList(),
+    strings = listOf("Message mods", "View mods", "Flair", "Add to multi"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditMoreDialogBottomSheet.java" }
+)
+
+/**
+ * Offers to override the sort a subreddit is read with, opened from the sheet of subreddit options.
+ */
+internal val sortOverrideDialogFingerprint = Fingerprint(
+    name = "r0",
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    strings = listOf("Update subreddit sort", "Override sort"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditMoreDialogBottomSheet.java" }
+)
+
+/**
+ * Lists the sorts that override offers, as the labels shown and the values stored for them.
+ */
+internal val sortOverrideOptionsFingerprint = Fingerprint(
+    name = "onClick",
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = listOf("Landroid/content/DialogInterface;", "I"),
+    strings = listOf("frontpage", "Update sort"),
+    custom = { _, classDef -> classDef.sourceFile == "PlainSubredditMoreDialogBottomSheet.java" }
+)
+
+/**
+ * Decodes a stored sort into the sort and time range it names.
+ *
+ * The one place both the overridden sorts and the app's own default are read back through, so the
+ * feed's own sorts are answered here rather than at each reader.
+ */
+internal val decodeSortFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "Landroid/util/Pair;",
+    parameters = listOf("Ljava/lang/String;"),
+    strings = listOf("CHECKING SORT: ", "sort_999")
+)
+
+/**
+ * Fills in the chip naming the current sort, from the sort and time range the screen holds.
+ *
+ * Those are the ones the screen was opened with rather than the one the feed was read with, so a sort
+ * the feed does not have is still named here after the request has fallen back to the feed's own. The
+ * name being shown is reachable here, which the label builder itself is not given.
+ */
+internal val sortChipFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PRIVATE),
+    returnType = "V",
+    parameters = listOf("Ljava/lang/String;", "Ljava/lang/String;"),
+    strings = listOf("ACCESS: ", " SORT: "),
+    custom = { _, classDef -> classDef.sourceFile == "AbstractChipGroup.java" }
+)
+
+/**
+ * Sends a link to another app, taking only the link.
+ *
+ * The sheets showing one of a subreddit's pages share through this rather than through the methods a
+ * post or comment is shared with, which name what is being shared alongside the link.
+ */
+internal val shareOnlyLinkFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "V",
+    parameters = listOf("Landroid/content/Context;", "Ljava/lang/String;"),
+    strings = listOf("android.intent.action.SEND", "android.intent.extra.TEXT"),
+    custom = { _, classDef -> classDef.sourceFile == "RedditHelper.java" }
+)
+
+/**
+ * Builds the address a save is sent to, which says whether it is a save or the undoing of one.
+ *
+ * The parameters a save is made with name only the item, so which way round it is has to be taken
+ * from here.
+ */
+internal val saveBuildUrlFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC, AccessFlags.STATIC),
+    returnType = "Ljava/lang/String;",
+    parameters = listOf("Landroid/content/Context;", "Z"),
+    strings = listOf("api/save", "api/unsave"),
+    custom = { _, classDef -> classDef.sourceFile == "OAuthSaveRequest.java" }
+)
+
+/**
+ * Builds the settings screen the feed's own settings are listed on.
+ *
+ * The account's details are asked for by rows that show their own input, so they are attached here
+ * once the screen has been built.
+ */
+internal val linksSettingsFingerprint = Fingerprint(
+    accessFlags = listOf(AccessFlags.PUBLIC),
+    returnType = "V",
+    parameters = listOf("Landroid/os/Bundle;", "Ljava/lang/String;"),
+    strings = listOf("default_browser", "bypass_browser"),
+    custom = { _, classDef -> classDef.sourceFile == "PreferencesLinksFragment.java" }
+)
