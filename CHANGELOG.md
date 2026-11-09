@@ -1,3 +1,14 @@
+## [1.10.0](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.0...v1.10.0) (2026-11-09)
+
+### 🐛 Bug Fixes
+
+* Update Hacker News and Other Discussions patches ([8dee21f](https://github.com/humzakh/HK-Morphe-Patches/commit/8dee21fb1217f26feaeae9c9758f6fb0f1207416))
+* Update Niagara weather fingerprints ([278958d](https://github.com/humzakh/HK-Morphe-Patches/commit/278958d4fc86a587ce82964202c0a322e237ce34))
+
+### ✨ New Features
+
+* Add Hacker News account functionality ([e4025f4](https://github.com/humzakh/HK-Morphe-Patches/commit/e4025f46bb544a9cb09716211e16a37b88138149))
+
 ## [1.10.0-dev.1](https://github.com/humzakh/HK-Morphe-Patches/compare/v1.9.1-dev.2...v1.10.0-dev.1) (2026-11-08)
 
 ### ✨ New Features
