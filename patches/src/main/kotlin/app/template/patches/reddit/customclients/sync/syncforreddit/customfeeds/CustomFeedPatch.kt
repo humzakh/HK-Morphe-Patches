@@ -1,6 +1,7 @@
 package app.template.patches.reddit.customclients.sync.syncforreddit.customfeeds
 
 import app.template.patches.reddit.customclients.sync.syncforreddit.SyncForRedditCompatible
+import app.template.patches.reddit.customclients.sync.syncforreddit.api.getUserAgentFingerprint
 
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructions
 import app.morphe.patcher.extensions.InstructionExtensions.addInstructionsWithLabels
@@ -10,7 +11,9 @@ import app.morphe.patcher.patch.BytecodePatchContext
 import app.morphe.patcher.patch.bytecodePatch
 import app.morphe.patcher.util.proxy.mutableTypes.MutableMethod
 import app.morphe.patcher.util.smali.ExternalLabel
+import com.android.tools.smali.dexlib2.AccessFlags
 import com.android.tools.smali.dexlib2.Opcode
+import com.android.tools.smali.dexlib2.iface.ClassDef
 import com.android.tools.smali.dexlib2.iface.instruction.FiveRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.OneRegisterInstruction
 import com.android.tools.smali.dexlib2.iface.instruction.ReferenceInstruction
@@ -25,6 +28,21 @@ import com.android.tools.smali.dexlib2.iface.reference.StringReference
  */
 private const val EXTENSION_CLASS_DESCRIPTOR =
     "Lapp/morphe/extension/syncforreddit/CustomFeedExtension;"
+
+/**
+ * The options left off the feed's sheet of subreddit options, named as they are listed.
+ *
+ * Each acts on a subreddit through Reddit - its moderators, its flairs, and the custom feeds an
+ * account collects subreddits into - so none has anything to act on here. Matched against the
+ * extension's own list, which decides whether an option is shown.
+ */
+private val HIDDEN_OPTIONS = listOf("Message mods", "View mods", "Flair", "Add to multi")
+
+/**
+ * The settings the account's details are kept under, matching the extension's own names and the ones
+ * the account patch lists them by.
+ */
+private val ACCOUNT_SETTINGS = listOf("custom_feed_username", "custom_feed_password")
 
 /**
  * A feed offered in the sort dialog in place of Reddit's sorts, and the drawable it is shown with.
@@ -78,6 +96,10 @@ fun customFeedPatch(
     // Offers the app for the site's links opened elsewhere. Applied as part of this patch rather than
     // listed on its own, since it is the same feature from the other side.
     dependsOn(customFeedLinksPatch(feedName, hosts))
+
+    // Asks for the account the feed's writes are made as, which the site offers no other way of being
+    // acted on by. Applied as part of this patch for the same reason as the links above.
+    dependsOn(customFeedAccountPatch(feedName))
 
     compatibleWith(*SyncForRedditCompatible)
 
@@ -170,6 +192,11 @@ fun customFeedPatch(
                 .mapNotNull { (it as? ReferenceInstruction)?.reference as? FieldReference }
                 .first { it.type == "Ljava/lang/String;" }
 
+            // The token belongs to whichever client the app signs in as, which another patch may have
+            // changed, so the user agent sent with it is the one the app itself reports rather than a
+            // copy of the original.
+            val userAgentMethod = getUserAgentFingerprint.method
+
             // The method declares enough locals to push "this" out of the range the four bit register
             // forms can address, so it is moved down before the field is read off it.
             addInstructions(
@@ -178,6 +205,10 @@ fun customFeedPatch(
                     move-object/from16 v0, p0
                     iget-object v0, v0, ${tokenField.definingClass}->${tokenField.name}:${tokenField.type}
                     invoke-static { v0 }, $EXTENSION_CLASS_DESCRIPTOR->noteToken(Ljava/lang/String;)V
+
+                    invoke-static { }, ${userAgentMethod.definingClass}->${userAgentMethod.name}()Ljava/lang/String;
+                    move-result-object v0
+                    invoke-static { v0 }, $EXTENSION_CLASS_DESCRIPTOR->noteUserAgent(Ljava/lang/String;)V
                 """
             )
         }
@@ -242,7 +273,22 @@ fun customFeedPatch(
 
         parseRulesNetworkResponseFingerprint.method.rewriteResponseBytes("rewriteRules")
 
-        wikiBuildUrlFingerprint.method.returnFromExtension("faqUrlFor", parameter = 1)
+        // The page asked for is passed along with the feed, so that a link from one of the site's pages
+        // to another is served in the same sheet rather than leaving the app. p1 is the subreddit or
+        // feed and p2 the page within it.
+        wikiBuildUrlFingerprint.method.addInstructions(
+            0,
+            """
+                invoke-static { p1, p2 }, $EXTENSION_CLASS_DESCRIPTOR->faqUrlFor(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                move-result-object v0
+
+                if-eqz v0, :not_custom_feed
+                return-object v0
+
+                :not_custom_feed
+                nop
+            """
+        )
 
         parseWikiNetworkResponseFingerprint.method.rewriteResponseBytes("rewriteWiki")
 
@@ -498,6 +544,17 @@ fun customFeedPatch(
             )
         }
 
+        // The sheets showing one of the feed's pages share through a method taking only the link, so
+        // the same correction is made there. That is where a page's own address is corrected to the
+        // one it is read from on the site.
+        shareOnlyLinkFingerprint.method.addInstructions(
+            0,
+            """
+                invoke-static { p1 }, $EXTENSION_CLASS_DESCRIPTOR->shareUrl(Ljava/lang/String;)Ljava/lang/String;
+                move-result-object p1
+            """
+        )
+
         // Copying takes a CharSequence rather than a String, so it is converted before being checked.
         copyLinkFingerprint.method.addInstructions(
             0,
@@ -559,6 +616,294 @@ fun customFeedPatch(
                 """
             )
         }
+
+        // Leave the chip offering to join a subreddit off the feed. The feed is shown through a
+        // subreddit's chips, because it is treated as a subreddit for the sake of showing an icon,
+        // and there is nothing on Reddit to join here.
+        //
+        // The chip is hidden where it is filled in, which is the one place it is made visible and the
+        // one every way of reaching it runs through - opening the feed and subscribing elsewhere both
+        // come back through here.
+        // The name being shown is read the way these methods already read it. Only some of them do,
+        // so it is taken from the one that does and used for all of them.
+        val chipGroupName = watchChipFingerprint.method.instructions
+            .mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+            .first { it.parameterTypes.isEmpty() && it.returnType == "Ljava/lang/String;" }
+
+        listOf(joinChipFingerprint, flairChipFingerprint, watchChipFingerprint)
+            .forEach { it.method.hideChipOnFeed(chipGroupName) }
+
+        // Title the sheet of options as the feed rather than as a subreddit, which it is shown
+        // through but is not one of.
+        subredditOptionsTitleFingerprint.method.apply {
+            val nameMethod = sheetNameMethod(subredditOptionsTitleFingerprint.originalClassDef)
+
+            val titleIndex = instructions.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? StringReference)?.string ==
+                    "Subreddit options"
+            }
+            val titleRegister = getInstruction<OneRegisterInstruction>(titleIndex).registerA
+
+            // The method is compiled with the single register the title is built in, so the name is
+            // read into it and the title passed from where it already is - the answer is returned in
+            // the same register either way.
+            addInstructions(
+                titleIndex + 1,
+                """
+                    invoke-virtual { p0 }, ${nameMethod.definingClass}->${nameMethod.name}()${nameMethod.returnType}
+                    move-result-object p0
+
+                    invoke-static { p0, v$titleRegister }, $EXTENSION_CLASS_DESCRIPTOR->optionsTitle(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                    move-result-object v$titleRegister
+                """
+            )
+        }
+
+        // Leave the options that act on a subreddit through Reddit off the feed's sheet. Each option
+        // is registered as it is built, so the registering is skipped for the ones left out and the
+        // option is built but never listed.
+        //
+        // The option is still assigned to the field the sheet dispatches on, which compares by
+        // identity, so one that was never listed simply never matches and the dispatch is unaffected.
+        // The registering call answers the option it was given back into the register it was passed
+        // in, so skipping the call leaves that register holding what the field is then stored from.
+        subredditOptionsFingerprint.method.apply {
+            val nameMethod = sheetNameMethod(subredditOptionsFingerprint.originalClassDef)
+
+            // Taken from the back forwards, so that each insertion does not move the ones still to be
+            // made.
+            HIDDEN_OPTIONS.map { option ->
+                option to instructions.indexOfFirst {
+                    ((it as? ReferenceInstruction)?.reference as? StringReference)?.string == option
+                }
+            }.sortedByDescending { (_, index) -> index }.forEach { (option, labelIndex) ->
+                val labelRegister = getInstruction<OneRegisterInstruction>(labelIndex).registerA
+
+                // The register the option's icon was built from, which is finished with by this
+                // point. Reused rather than claiming another, since the method is compiled with only
+                // the registers it uses and anything past them is where its parameters are.
+                val scratchRegister = getInstruction<OneRegisterInstruction>(labelIndex - 1).registerA
+
+                // The call registering the option, which is the next one made after it is built.
+                val registerIndex = instructions
+                    .drop(labelIndex)
+                    .indexOfFirst { instruction ->
+                        instruction.opcode == Opcode.INVOKE_VIRTUAL &&
+                            ((instruction as ReferenceInstruction).reference as MethodReference)
+                                .parameterTypes.size == 1
+                    } + labelIndex
+
+                addInstructionsWithLabels(
+                    registerIndex,
+                    """
+                        invoke-virtual { p0 }, ${nameMethod.definingClass}->${nameMethod.name}()${nameMethod.returnType}
+                        move-result-object v$labelRegister
+
+                        const-string v$scratchRegister, "$option"
+
+                        invoke-static { v$labelRegister, v$scratchRegister }, $EXTENSION_CLASS_DESCRIPTOR->showsOption(Ljava/lang/String;Ljava/lang/String;)Z
+                        move-result v$labelRegister
+
+                        if-eqz v$labelRegister, :skips_option
+                    """,
+                    // Past the answer the skipped call would have been read from as well as the call
+                    // itself, since a move-result may not be branched to. The register it would have
+                    // answered into is the one the option was passed in, so it already holds it.
+                    ExternalLabel("skips_option", getInstruction(registerIndex + 2))
+                )
+            }
+        }
+
+        // Title the dialog offering to override the sort as the feed, in the same way as the sheet it
+        // is opened from.
+        sortOverrideDialogFingerprint.method.apply {
+            val nameMethod = sheetNameMethod(sortOverrideDialogFingerprint.originalClassDef)
+
+            val titleIndex = instructions.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? StringReference)?.string ==
+                    "Update subreddit sort"
+            }
+            val titleRegister = getInstruction<OneRegisterInstruction>(titleIndex).registerA
+
+            // The name is read into a register of its own, so that the title it is answered against
+            // is still there to be passed. The method builds the dialog one call at a time, so the
+            // register past the two the title is built with is free at this point.
+            val nameRegister = titleRegister + 1
+
+            addInstructions(
+                titleIndex + 1,
+                """
+                    invoke-virtual { p0 }, ${nameMethod.definingClass}->${nameMethod.name}()${nameMethod.returnType}
+                    move-result-object v$nameRegister
+
+                    invoke-static { v$nameRegister, v$titleRegister }, $EXTENSION_CLASS_DESCRIPTOR->sortDialogTitle(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                    move-result-object v$titleRegister
+                """
+            )
+        }
+
+        // Offer the feeds the site serves in place of Reddit's sorts, which mean nothing here.
+        //
+        // The dialog reads two arrays: the labels it shows and the values it stores for them, picked
+        // by the same index. Both are answered with the feed's own sorts, so what is picked is stored
+        // as the sort it is rather than as one of Reddit's codes.
+        sortOverrideOptionsFingerprint.method.apply {
+            // The name being sorted, which the method reads for itself before each array. This runs
+            // on the listener the dialog was opened with rather than on the sheet, so the sheet is
+            // taken off the field holding it first, the same way the method itself does.
+            val nameMethod = instructions
+                .mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+                .first { it.parameterTypes.isEmpty() && it.returnType == "Ljava/lang/String;" }
+
+            // The field the sheet is held on, taken as the one it is read off just before the name is
+            // asked for.
+            val nameIndex = instructions.indexOfFirst {
+                ((it as? ReferenceInstruction)?.reference as? MethodReference) == nameMethod
+            }
+            val sheetField = instructions
+                .take(nameIndex)
+                .last { it.opcode == Opcode.IGET_OBJECT }
+                .let { (it as ReferenceInstruction).reference as FieldReference }
+
+            // Both arrays are read the same way, so each is answered where it is read. Taken from the
+            // back forwards, so that the earlier insertion does not move the later one.
+            instructions
+                .withIndex()
+                .filter { (_, instruction) ->
+                    instruction.opcode == Opcode.INVOKE_VIRTUAL &&
+                        ((instruction as ReferenceInstruction).reference as MethodReference).name ==
+                        "getStringArray"
+                }
+                .map { (index, _) -> index }
+                .sortedDescending()
+                .forEach { arrayIndex ->
+                    val arrayRegister =
+                        getInstruction<OneRegisterInstruction>(arrayIndex + 1).registerA
+
+                    // The register the array's resource id was passed in, which is finished with once
+                    // the array has been read. Reused rather than claiming another, since every
+                    // register this method has is otherwise in use.
+                    val scratchRegister =
+                        getInstruction<FiveRegisterInstruction>(arrayIndex).registerD
+
+                    // The array is answered back into the register it was read into, so no register
+                    // has to be claimed from a method whose own are all in use. Anything but the feed
+                    // is answered with the array it was read with, leaving it as it was.
+                    addInstructions(
+                        arrayIndex + 2,
+                        """
+                            iget-object v$scratchRegister, p0, ${sheetField.definingClass}->${sheetField.name}:${sheetField.type}
+                            invoke-virtual { v$scratchRegister }, ${nameMethod.definingClass}->${nameMethod.name}()${nameMethod.returnType}
+                            move-result-object v$scratchRegister
+
+                            invoke-static { v$scratchRegister, v$arrayRegister }, $EXTENSION_CLASS_DESCRIPTOR->sortOptions(Ljava/lang/String;[Ljava/lang/String;)[Ljava/lang/String;
+                            move-result-object v$arrayRegister
+                        """
+                    )
+                }
+        }
+
+        // Read one of the feed's own sorts back as the sort it is. The app decodes what it stored into
+        // a sort and a time range, reading anything it does not recognise as "New", which the feed's
+        // sorts would otherwise be flattened to.
+        decodeSortFingerprint.method.addInstructions(
+            0,
+            """
+                invoke-static { p0 }, $EXTENSION_CLASS_DESCRIPTOR->decodeSort(Ljava/lang/String;)Ljava/lang/String;
+                move-result-object v0
+
+                if-eqz v0, :not_custom_feed
+
+                const/4 v1, 0x0
+                invoke-static { v0, v1 }, Landroid/util/Pair;->create(Ljava/lang/Object;Ljava/lang/Object;)Landroid/util/Pair;
+                move-result-object v0
+                return-object v0
+
+                :not_custom_feed
+                nop
+            """
+        )
+
+        // Name the sort actually being read on the chip. The screen holds the sort it was opened
+        // with, which for this feed may be one of Reddit's that it does not have: the request falls
+        // back to the feed's own sort, but nothing corrects what is shown, so the chip would name a
+        // sort the posts under it were not read with.
+        //
+        // The time range is dropped along with it, since the feed's sorts have none and naming one
+        // would read as a range that had been applied.
+        sortChipFingerprint.method.apply {
+            // The accessor holding the name being shown, taken from the chip group this is declared on
+            // rather than by shape - the method builds a string of its own, whose toString would
+            // otherwise be picked as a no argument method answering a String.
+            val nameMethod = mutableClassDefBy(definingClass)
+                .methods
+                .first {
+                    it.parameters.isEmpty() &&
+                        it.returnType == "Ljava/lang/String;" &&
+                        AccessFlags.PROTECTED.isSet(it.accessFlags)
+                }
+
+            addInstructions(
+                0,
+                """
+                    invoke-virtual { p0 }, $definingClass->${nameMethod.name}()${nameMethod.returnType}
+                    move-result-object v0
+
+                    invoke-static { v0, p1 }, $EXTENSION_CLASS_DESCRIPTOR->sortLabel(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                    move-result-object p1
+
+                    invoke-virtual { p0 }, $definingClass->${nameMethod.name}()${nameMethod.returnType}
+                    move-result-object v0
+
+                    invoke-static { v0, p2 }, $EXTENSION_CLASS_DESCRIPTOR->sortRangeLabel(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+                    move-result-object p2
+                """
+            )
+        }
+
+        // Ask for the account's details from the screen they are listed on. They are plain rows, which
+        // the app does not open a dialog for, so each is given the input it asks for its value with
+        // once the screen has been built.
+        //
+        // Each row is found here rather than in the extension: the preference library the app is built
+        // on is obfuscated, so neither the screen nor the method finding a row on it can be named from
+        // there. Both are read from how the method already finds the rows it sets up itself.
+        linksSettingsFingerprint.method.apply {
+            val findPreference = instructions
+                .mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+                .first {
+                    it.parameterTypes.map(CharSequence::toString) ==
+                        listOf("Ljava/lang/CharSequence;") &&
+                        it.returnType == "Landroidx/preference/Preference;"
+                }
+
+            // The method is compiled with no locals of its own, so its parameter registers are all
+            // there is to work in. The screen is the one thing that must survive, and it is passed in
+            // p0, so each row is looked up and handed over before the next one writes over anything -
+            // p0 itself is only read, never written.
+            addInstructions(
+                instructions.count() - 1,
+                ACCOUNT_SETTINGS.joinToString("\n\n") { key ->
+                    """
+                        const-string p1, "$key"
+                        invoke-virtual { p0, p1 }, ${findPreference.definingClass}->${findPreference.name}(${findPreference.parameterTypes[0]})${findPreference.returnType}
+                        move-result-object p1
+
+                        const-string p2, "$key"
+                        invoke-static { p1, p2 }, $EXTENSION_CLASS_DESCRIPTOR->bindAccountSetting(Ljava/lang/Object;Ljava/lang/String;)V
+                    """.trimIndent()
+                }
+            )
+        }
+
+        // Note which way round a save is, which its parameters do not say. p1 is the flag the address
+        // is chosen by, which is set for the undoing of a save.
+        saveBuildUrlFingerprint.method.addInstructions(
+            0,
+            """
+                invoke-static { p1 }, $EXTENSION_CLASS_DESCRIPTOR->noteSave(Z)V
+            """
+        )
 
         // Anything the feed needs beyond what every feed does.
         block()
@@ -719,3 +1064,64 @@ private fun MutableMethod.rewriteResponseBytes(extensionMethod: String) {
         """
     )
 }
+
+/**
+ * Leaves the chip this method fills in off the feed, showing it as it was for anything else.
+ *
+ * The chip is taken from the method rather than named, since each of these methods reads only its
+ * own.
+ *
+ * @param nameMethod the accessor holding the subreddit or feed being shown.
+ *
+ * The chip is shown again on the way out rather than only being hidden. The app builds one chip group
+ * and shows it for every subreddit, so a chip hidden for the feed would stay hidden for the
+ * subreddits opened after it - the app's own paths never have to undo this, since what they hide a
+ * chip for does not change between subreddits.
+ *
+ * Each of these methods is compiled with the two registers this needs, so the chip is read into one
+ * of them before the answer is tested rather than claiming another.
+ */
+context(_: BytecodePatchContext)
+private fun MutableMethod.hideChipOnFeed(nameMethod: MethodReference) {
+    val chipField = instructions
+        .mapNotNull { (it as? ReferenceInstruction)?.reference as? FieldReference }
+        .first { it.definingClass == definingClass }
+
+    addInstructions(
+        0,
+        """
+            invoke-virtual { p0 }, ${nameMethod.definingClass}->${nameMethod.name}()${nameMethod.returnType}
+            move-result-object v0
+
+            invoke-static { v0 }, $EXTENSION_CLASS_DESCRIPTOR->isFeedName(Ljava/lang/String;)Z
+            move-result v0
+
+            iget-object v1, p0, ${chipField.definingClass}->${chipField.name}:${chipField.type}
+
+            if-eqz v0, :not_custom_feed
+
+            const/16 v0, 0x8
+            invoke-virtual { v1, v0 }, Landroid/widget/CheckBox;->setVisibility(I)V
+            return-void
+
+            :not_custom_feed
+            const/4 v0, 0x0
+            invoke-virtual { v1, v0 }, Landroid/widget/CheckBox;->setVisibility(I)V
+        """
+    )
+}
+
+/**
+ * The accessor holding the subreddit or feed the sheet was opened for.
+ *
+ * Read from the method dispatching the sheet's options, which reads it the same way for each of them,
+ * rather than being named.
+ */
+context(context: BytecodePatchContext)
+private fun sheetNameMethod(classDef: ClassDef): MethodReference =
+    context.mutableClassDefBy(classDef)
+        .methods
+        .first { it.name == "r0" }
+        .instructions
+        .mapNotNull { (it as? ReferenceInstruction)?.reference as? MethodReference }
+        .first { it.parameterTypes.isEmpty() && it.returnType == "Ljava/lang/String;" }

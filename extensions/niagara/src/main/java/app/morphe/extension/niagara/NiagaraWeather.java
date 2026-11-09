@@ -1,5 +1,6 @@
 package app.morphe.extension.niagara;
 
+import android.net.Uri;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -8,10 +9,12 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Replaces Niagara's weather server with a patch-provided source, by converting the source's
- * {@link Forecast} into the server's response format.
+ * Answers Niagara's weather server request from a patch-provided source, by converting the source's
+ * {@link Forecast} into the server's response format. Niagara parses and caches the response itself.
  * <p>
  * Units: Celsius, epoch seconds, OpenWeatherMap condition codes.
  *
@@ -51,28 +54,37 @@ public final class NiagaraWeather {
     }
 
     /**
-     * Called in place of Niagara's server fetch, off the main thread.
+     * Called in place of Niagara's request to its weather server, off the main thread.
      *
-     * @return Niagara's parsed weather, or null to fall back to its server.
+     * @param request The OkHttp request, whose URL carries the lat, long and lang query parameters.
+     * @return The server's response body, or null to send the request to the server.
      */
-    public static Object fetchWeather(Object manager, Object location) {
+    public static String fetchResponse(Object request) {
         try {
-            double latitude = latitude(location);
-            double longitude = longitude(location);
-            Forecast forecast = fetchFromSource(latitude, longitude);
+            String url = request.toString();
+            String latitude = queryParameter(url, "lat");
+            String longitude = queryParameter(url, "long");
+
+            Forecast forecast = fetchFromSource(Double.parseDouble(latitude), Double.parseDouble(longitude));
             if (forecast == null) return null;
 
-            String response = response(forecast, latitude, longitude);
-            Object weather = decode(manager, response, System.currentTimeMillis());
-            saveResponse(manager, response);
-            return weather;
+            return response(forecast, latitude, longitude, queryParameter(url, "lang"));
         } catch (Exception e) {
             Log.e(TAG, "Failed to fetch weather", e);
             return null;
         }
     }
 
-    private static String response(Forecast forecast, double latitude, double longitude) throws JSONException {
+    /**
+     * A query parameter of the URL in OkHttp's {@code Request{method=GET, url=...}} string.
+     */
+    private static String queryParameter(String request, String name) {
+        Matcher matcher = Pattern.compile("[?&]" + name + "=([^&,}\\s]*)").matcher(request);
+        return matcher.find() ? Uri.decode(matcher.group(1)) : null;
+    }
+
+    private static String response(Forecast forecast, String latitude, String longitude, String language)
+            throws JSONException {
         Point current = forecast.current;
         List<Point> hours = forecast.hours;
         List<Day> days = forecast.days;
@@ -131,9 +143,9 @@ public final class NiagaraWeather {
         return new JSONObject()
                 .put("timestamp", current.time)
                 .put("provider", "external")
-                .put("lat", String.valueOf(latitude))
-                .put("long", String.valueOf(longitude))
-                .put("lang", "en")
+                .put("lat", latitude)
+                .put("long", longitude)
+                .put("lang", language)
                 .put("forecast", forecastJson)
                 .toString();
     }
@@ -185,24 +197,9 @@ public final class NiagaraWeather {
         return "04";
     }
 
-    // Placeholders, filled in by the patch.
+    // Placeholder, filled in by the source patch.
 
     static Forecast fetchFromSource(double latitude, double longitude) throws Exception {
         return null;
-    }
-
-    static Object decode(Object manager, String response, long timestamp) {
-        return null;
-    }
-
-    static void saveResponse(Object manager, String response) {
-    }
-
-    static float latitude(Object location) {
-        return 0;
-    }
-
-    static float longitude(Object location) {
-        return 0;
     }
 }

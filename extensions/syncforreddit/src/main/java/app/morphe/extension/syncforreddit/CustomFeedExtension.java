@@ -1,5 +1,7 @@
 package app.morphe.extension.syncforreddit;
 
+import android.util.Log;
+
 import com.android.volley.AuthFailureError;
 
 import org.json.JSONArray;
@@ -127,15 +129,16 @@ public abstract class CustomFeedExtension {
 
     protected static final int TIMEOUT_MS = 10_000;
 
+    /** Matches the number of stories a site typically shows on a page. */
+    protected static final int PAGE_SIZE = 30;
+
     /**
      * How many requests are made at once when a page needs one per item.
      *
-     * <p>Kept small enough to stay polite to a site that serves these without rate limiting.
+     * <p>One per item of a page, so that a page's stories, and the thumbnails for them, each load in
+     * a single round of requests rather than leaving the last few waiting on the rest.
      */
-    protected static final int THREADS = 24;
-
-    /** Matches the number of stories a site typically shows on a page. */
-    protected static final int PAGE_SIZE = 30;
+    protected static final int THREADS = PAGE_SIZE;
 
     // The ids served, which is what tells the feed's content apart from Reddit's.
 
@@ -198,7 +201,9 @@ public abstract class CustomFeedExtension {
             return false;
         }
 
-        String value = name.trim();
+        // A name read back out of an address carries its space escaped, since a Markdown link would
+        // otherwise end at it.
+        String value = name.trim().replace("%20", " ");
         return value.equalsIgnoreCase(feedKey()) || value.equalsIgnoreCase(feedName());
     }
 
@@ -248,6 +253,14 @@ public abstract class CustomFeedExtension {
     protected abstract boolean isKnownSort(String sort);
 
     /**
+     * The feeds offered in place of Reddit's sorts, in the order they are listed.
+     *
+     * <p>Named the same way the sort dialog names them, since a sort picked here is read back as one
+     * of those.
+     */
+    protected abstract String[] sortLabels();
+
+    /**
      * The icon shown on the chip naming the current feed.
      *
      * @return the drawable to show, or {@code 0} for a sort the app already has an icon for.
@@ -278,6 +291,31 @@ public abstract class CustomFeedExtension {
     /** The title the feed's wiki is shown under, in place of the feed name and page it is read from. */
     protected String wikiTitle() {
         return feedName() + " FAQ";
+    }
+
+    /**
+     * The address of one of the site's pages, by the name a link to it was rewritten under.
+     *
+     * @return the address to request, or {@code null} for a page the feed does not serve.
+     */
+    protected String wikiPageUrl(String page) {
+        return null;
+    }
+
+    /** The title to show for one of those pages, or {@code null} for the wiki's usual title. */
+    protected String wikiPageTitle(String page) {
+        return null;
+    }
+
+    /**
+     * The address to share for one of those pages, which is where it is read on the site.
+     *
+     * <p>Defaults to the address the page is requested from, which for a page served whole is the same
+     * thing. A page holding one section of another names that section, so it is shared as the part of
+     * the page it actually is.
+     */
+    protected String wikiPageShareUrl(String page) {
+        return wikiPageUrl(page);
     }
 
     // Translating what the site answers with into what Sync parses.
@@ -423,6 +461,13 @@ public abstract class CustomFeedExtension {
             return null;
         }
 
+        // One of the site's own pages is opened as the wiki page it is served as, so that following a
+        // link to it stays in the app rather than handing the address to a browser.
+        String page = wikiPageOpened(url);
+        if (page != null) {
+            return page;
+        }
+
         String id = itemIdIn(url);
         if (id == null) {
             return url;
@@ -458,6 +503,13 @@ public abstract class CustomFeedExtension {
                 if (url.startsWith(prefix + siteUrl())) {
                     return url.substring(prefix.length());
                 }
+            }
+
+            // Sharing one of the site's pages builds a wiki address of the feed, which is not a page
+            // Reddit has. The page on the site is shared instead.
+            String page = wikiPageShared(url);
+            if (page != null) {
+                return page;
             }
 
             // Sharing the feed itself builds a reddit.com address from the name it is listed under,
@@ -596,6 +648,86 @@ public abstract class CustomFeedExtension {
         }
     }
 
+    // The account a feed's writes are made as, which is the feed's own business - the entry points
+    // here are what the patch injects calls to, and each passes to the feed.
+
+    /**
+     * Shows one of the account's details on the row listing it, and asks for it again when tapped.
+     *
+     * @param row the row listing the setting, which the patch finds on the screen.
+     * @param key the setting the row is listing.
+     */
+    public static void bindAccountSetting(Object row, String key) {
+        CustomFeedExtension feed = feed();
+        if (feed != null) {
+            feed.bindSetting(row, key);
+        }
+    }
+
+    /** Shows and asks for one of the account's details, for the feeds that keep one. */
+    protected void bindSetting(Object row, String key) {
+    }
+
+    /**
+     * Notes whether the save being built is a save or the undoing of one.
+     *
+     * <p>The parameters a save is made with name only the item, so which way round it is is taken from
+     * the address as it is built, in the same way as the page offset for a listing.
+     */
+    public static void noteSave(boolean unsave) {
+        CustomFeedExtension feed = feed();
+        if (feed != null) {
+            feed.notedSave(!unsave);
+        }
+    }
+
+    /** Notes which way round the save being built is, for the feeds that make one. */
+    protected void notedSave(boolean saved) {
+    }
+
+    /**
+     * Forgets what the feed read about the account, so that it is read again.
+     *
+     * <p>Called when the feed is opened or refreshed, so that something done to the account elsewhere
+     * is picked up rather than waiting for the app to be restarted.
+     */
+    protected void refreshAccountState() {
+    }
+
+    /** What came of a write made on the site, which the app reports to the user. */
+    public enum WriteResult {
+        /** The site took it. */
+        DONE,
+        /** No account has been given to act as. */
+        NO_ACCOUNT,
+        /** The site refused it, which for a write it otherwise allows means the details are wrong. */
+        REFUSED,
+        /** The site allows this write only for some accounts, such as downvoting. */
+        NOT_ALLOWED,
+        /** The site could not be reached, or answered in a way that could not be read. */
+        FAILED,
+        /** The feed does not offer this at all, having nothing to make the write as. */
+        UNSUPPORTED;
+
+        /** What to tell the user, or {@code null} where there is nothing to say. */
+        public String message(String feedName) {
+            switch (this) {
+                case NO_ACCOUNT:
+                    return "Add your " + feedName + " account in Settings to do that";
+                case REFUSED:
+                    return feedName + " refused that - check your username and password";
+                case NOT_ALLOWED:
+                    return feedName + " does not allow that from this account yet";
+                case FAILED:
+                    return "Could not reach " + feedName;
+                case UNSUPPORTED:
+                    return "Not supported on " + feedName;
+                default:
+                    return null;
+            }
+        }
+    }
+
     // Reading pages, and what Reddit holds for the same links.
 
     /** Reads a url, or {@code null} if it cannot be read. */
@@ -617,7 +749,14 @@ public abstract class CustomFeedExtension {
 
             if (bearer != null) {
                 connection.setRequestProperty("Authorization", "bearer " + bearer);
-                connection.setRequestProperty("User-Agent", USER_AGENT);
+                connection.setRequestProperty("User-Agent", userAgent);
+            }
+
+            int status = connection.getResponseCode();
+            if (status >= 400) {
+                Log.w(LOG_TAG, "HTTP " + status + " for " + url);
+                connection.disconnect();
+                return null;
             }
 
             InputStream in = connection.getInputStream();
@@ -628,18 +767,31 @@ public abstract class CustomFeedExtension {
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
             }
+            // A connection read to the end is closed but not disconnected, so the next request to the
+            // same host reuses it instead of paying for a new TLS handshake. A thread costs one request
+            // per comment, which makes that handshake most of the time it takes.
             in.close();
 
             return out.toString("UTF-8");
         } catch (Exception e) {
-            return null;
-        } finally {
+            Log.w(LOG_TAG, "Failed to read " + url, e);
+            // A connection left part way through a response cannot be reused, so it is closed.
             if (connection != null) {
                 connection.disconnect();
             }
+            return null;
         }
     }
 
+    /**
+     * The answer to a form sent to a url, which the site's writes are made with.
+     *
+     * <p>Sent as a form rather than as json, which is what the site's own pages post, and answered
+     * without being followed: the site answers a write with a redirect, and where it went is what
+     * says whether the write was taken.
+     *
+     * @return where the site redirected to, or {@code null} if the request could not be made.
+     */
     /**
      * Runs a call for each of a list of items at once, dropping any that fail.
      *
@@ -682,16 +834,90 @@ public abstract class CustomFeedExtension {
         }
     }
 
+    /**
+     * Runs a call for each of a list of items at once, keeping only those that finish within a
+     * shared time budget.
+     *
+     * <p>For lookups that only add to a page, so that the page is not held back by the slowest of
+     * them. Calls still running when the budget is spent are abandoned, and their items left out.
+     */
+    protected static <T, R> List<R> parallel(List<T> items, Fetcher<T, R> fetcher, long budgetMs) {
+        if (items.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(Math.min(THREADS, items.size()));
+
+        try {
+            List<Future<R>> futures = new ArrayList<>();
+            for (final T item : items) {
+                futures.add(executor.submit(new Callable<R>() {
+                    @Override
+                    public R call() {
+                        return fetcher.fetch(item);
+                    }
+                }));
+            }
+
+            long deadline = System.currentTimeMillis() + budgetMs;
+            List<R> results = new ArrayList<>();
+            for (Future<R> future : futures) {
+                long remaining = deadline - System.currentTimeMillis();
+                try {
+                    R result = remaining > 0
+                            ? future.get(remaining, TimeUnit.MILLISECONDS)
+                            // Out of time, but anything already finished is still taken.
+                            : future.isDone() ? future.get() : null;
+                    if (result != null) {
+                        results.add(result);
+                    }
+                } catch (Exception e) {
+                    // An item that fails or runs out of time is left out rather than failing the page.
+                }
+            }
+            return results;
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
     /** Fetches one item, for use with {@link #parallel}. */
     public interface Fetcher<T, R> {
         R fetch(T item);
     }
 
-    /** Reddit's index of the links people have submitted, which is where thumbnails come from. */
-    private static final String INFO_URL = "https://oauth.reddit.com/api/info?url=";
+    /**
+     * Reddit's search for the posts linking to a url, which is where thumbnails come from.
+     *
+     * <p>Reddit's index of submitted links, {@code /api/info?url=}, is closed to third party clients
+     * and answers with an html 403 page. Search still finds the posts a link was submitted in, in the
+     * same listing shape.
+     */
+    private static final String SEARCH_URL =
+            "https://oauth.reddit.com/search?type=link&sort=relevance&limit=10&raw_json=1&q=url%3A";
 
-    /** The user agent the app identifies itself to Reddit with. */
-    private static final String USER_AGENT =
+    /**
+     * How long a page waits for its thumbnails.
+     *
+     * <p>Thumbnails only add to a page, so it is shown without the ones Reddit is slow to answer for
+     * rather than held back by them. Those are looked up again the next time the page is loaded.
+     */
+    private static final long THUMBNAIL_BUDGET_MS = 3_000;
+
+    /** Stands for a link Reddit was asked about and holds no thumbnail for. */
+    private static final Preview NO_PREVIEW = new Preview("", "", 0, 0);
+
+    /** Tag the feed's requests are logged under. */
+    protected static final String LOG_TAG = "MorpheCustomFeed";
+
+    /**
+     * The user agent the app identifies itself to Reddit with.
+     *
+     * <p>Read from the app rather than written out, since the token is only accepted alongside the
+     * user agent of the client it was issued to, which a patch spoofing the client changes. The
+     * original is kept until the app has reported its own.
+     */
+    private static volatile String userAgent =
             "android:com.laurencedawson.reddit_sync:vv23.06.30-13:39 (by /u/ljdawson)";
 
     /** The token the current posts request was sent with, used to ask Reddit about the same links. */
@@ -753,25 +979,51 @@ public abstract class CustomFeedExtension {
     protected static Map<String, Preview> thumbnails(List<String> urls) {
         Map<String, Preview> found = new LinkedHashMap<>();
 
-        if (token == null || urls.isEmpty()) {
+        if (urls.isEmpty()) {
             return found;
+        }
+        if (token == null) {
+            Log.w(LOG_TAG, "No token yet, so no thumbnails are looked up");
+            return found;
+        }
+
+        // Links already asked about this session, with or without a thumbnail, are not asked again.
+        List<String> unknown = new ArrayList<>();
+        for (String url : urls) {
+            Preview known = knownThumbnails.get(url);
+            if (known == null) {
+                unknown.add(url);
+            } else if (known != NO_PREVIEW) {
+                found.put(url, known);
+            }
         }
 
         // Reddit answers this for one link at a time, so the page's links are looked up in parallel
         // rather than one after another. Each answer carries the link it belongs to, so that a link
         // Reddit holds nothing for simply drops out without shifting the rest.
-        List<Found> answers = parallel(urls, new Fetcher<String, Found>() {
+        long start = System.currentTimeMillis();
+        List<Found> answers = parallel(unknown, new Fetcher<String, Found>() {
             @Override
             public Found fetch(String url) {
                 Preview preview = previewFor(url);
                 return preview == null ? null : new Found(url, preview);
             }
-        });
+        }, THUMBNAIL_BUDGET_MS);
 
+        int hits = 0;
         for (Found answer : answers) {
-            found.put(answer.url, answer.preview);
+            // Only a definite answer is remembered; a lookup that failed or ran out of time is asked
+            // again next time.
             knownThumbnails.put(answer.url, answer.preview);
+            if (answer.preview != NO_PREVIEW) {
+                found.put(answer.url, answer.preview);
+                hits++;
+            }
         }
+        Log.d(LOG_TAG, "Thumbnails: " + hits + " found, " + (answers.size() - hits) + " none, "
+                + (unknown.size() - answers.size()) + " unanswered of " + unknown.size()
+                + " looked up (" + (urls.size() - unknown.size()) + " cached) in "
+                + (System.currentTimeMillis() - start) + " ms");
         return found;
     }
 
@@ -794,10 +1046,39 @@ public abstract class CustomFeedExtension {
                 .replace("&amp;", "&");
     }
 
-    /** The thumbnail Reddit holds for a single link, or {@code null} if it holds none. */
+    /**
+     * Whether two links are to the same page, ignoring the differences Reddit and the site may
+     * disagree on: the scheme, a leading "www.", a trailing slash and the case of the host.
+     */
+    private static boolean sameLink(String a, String b) {
+        return normalizeLink(a).equals(normalizeLink(b));
+    }
+
+    private static String normalizeLink(String link) {
+        String result = unescape(link.trim());
+        int scheme = result.indexOf("://");
+        if (scheme != -1) {
+            result = result.substring(scheme + 3);
+        }
+        int slash = result.indexOf('/');
+        String host = (slash == -1 ? result : result.substring(0, slash)).toLowerCase();
+        String rest = slash == -1 ? "" : result.substring(slash);
+        if (host.startsWith("www.")) {
+            host = host.substring(4);
+        }
+        while (rest.endsWith("/")) {
+            rest = rest.substring(0, rest.length() - 1);
+        }
+        return host + rest;
+    }
+
+    /**
+     * The thumbnail Reddit holds for a single link, {@link #NO_PREVIEW} if it holds none, or
+     * {@code null} if Reddit could not be asked.
+     */
     private static Preview previewFor(String url) {
         try {
-            String body = get(INFO_URL + URLEncoder.encode(url, "UTF-8"), token);
+            String body = get(SEARCH_URL + URLEncoder.encode(url, "UTF-8"), token);
             if (body == null) {
                 return null;
             }
@@ -809,6 +1090,12 @@ public abstract class CustomFeedExtension {
             for (int i = 0; i < children.length(); i++) {
                 JSONObject post = children.getJSONObject(i).optJSONObject("data");
                 if (post == null) {
+                    continue;
+                }
+
+                // Search also answers with posts whose links only resemble this one, which would
+                // give the story another page's picture.
+                if (!sameLink(url, post.optString("url", ""))) {
                     continue;
                 }
 
@@ -845,8 +1132,9 @@ public abstract class CustomFeedExtension {
 
                 return new Preview(thumbnail, previewUrl, width, height);
             }
+            return NO_PREVIEW;
         } catch (Exception e) {
-            // Treated the same as Reddit holding nothing for the link.
+            // Left unanswered, so the link is asked about again next time.
         }
         return null;
     }
@@ -926,6 +1214,12 @@ public abstract class CustomFeedExtension {
         // left to claim this response.
         pendingProfile = null;
         pendingSection = null;
+
+        // Anything the feed reads about the account rather than about a post is read again when the
+        // feed is opened or refreshed, which is the first page rather than one scrolled onto.
+        if (pendingOffset == 0) {
+            feed.refreshAccountState();
+        }
 
         return feed.postsUrl(after, sort);
     }
@@ -1045,6 +1339,106 @@ public abstract class CustomFeedExtension {
         return feed != null && feed.isFeed(name);
     }
 
+    /**
+     * The title for the sheet of options shown for a subreddit, which the feed is shown through.
+     *
+     * <p>The sheet is titled for a subreddit, which the feed is not one of, so it is named as the
+     * feed it is. Anything else keeps the title it was given.
+     */
+    public static String optionsTitle(String name, String title) {
+        return isFeedName(name) ? "Feed options" : title;
+    }
+
+    /**
+     * Whether an option belongs in that sheet, which the ones meaning nothing for the feed are left
+     * out of.
+     *
+     * <p>The options left out act on a subreddit through Reddit - its moderators, its flairs and the
+     * custom feeds an account collects subreddits into. None of them has anything to act on here.
+     */
+    public static boolean showsOption(String name, String option) {
+        if (!isFeedName(name)) {
+            return true;
+        }
+
+        for (String hidden : HIDDEN_FEED_OPTIONS) {
+            if (hidden.equals(option)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** The options left off the feed's sheet, named as they are listed. */
+    private static final String[] HIDDEN_FEED_OPTIONS = {
+        "Message mods", "View mods", "Flair", "Add to multi"
+    };
+
+    /**
+     * The title for the dialog offering to override the sort a subreddit is read with.
+     *
+     * <p>Named for the feed rather than for a subreddit, in the same way as the sheet it is opened
+     * from.
+     */
+    public static String sortDialogTitle(String name, String title) {
+        return isFeedName(name) ? "Update feed sort" : title;
+    }
+
+    /**
+     * The sorts to offer for a name, which are the app's own for anything but the feed.
+     *
+     * <p>Reddit's sorts mean nothing for the feed, so the feeds the site serves are offered in their
+     * place - the same ones the sort dialog offers, listed in the same order. Both the labels shown
+     * and the values stored are these names, so what is picked is stored as the sort it is.
+     *
+     * <p>Anything else is answered with the sorts it was read with, so the array is replaced in place
+     * and only the feed is affected.
+     */
+    public static String[] sortOptions(String name, String[] sorts) {
+        CustomFeedExtension feed = feed();
+        return feed != null && feed.isFeed(name) ? feed.sortLabels() : sorts;
+    }
+
+    /**
+     * The sort a stored override refers to, or {@code null} for one of Reddit's own.
+     *
+     * <p>The app stores its sorts as codes it decodes back into a name and a time range, and anything
+     * it does not recognise it reads as "New". The feed's sorts are stored as the names they are, so
+     * they are answered here before that decoding reaches them.
+     */
+    public static String decodeSort(String stored) {
+        CustomFeedExtension feed = feed();
+        return feed != null && feed.isKnownSort(stored) ? stored.trim() : null;
+    }
+
+    /**
+     * The sort to name on the chip, which is the one actually being read for the feed.
+     *
+     * <p>The chip is labelled from the sort the screen holds, which for the feed may be one of
+     * Reddit's that it does not have - the request falls back to the feed's own sort, but nothing
+     * corrects what is shown. The sort actually being read is named here instead, so the chip agrees
+     * with the posts under it.
+     */
+    public static String sortLabel(String name, String sort) {
+        CustomFeedExtension feed = feed();
+        if (feed == null || !feed.isFeed(name)) {
+            return sort;
+        }
+
+        return feed.isKnownSort(sort) ? sort.trim() : feed.defaultSort();
+    }
+
+    /**
+     * The time range to name alongside that sort, which the feed's own sorts have none of.
+     *
+     * <p>Reddit's ranges go with sorts like Top and Controversial, neither of which the feed has, so
+     * naming one next to a feed of the site's would read as a range that was applied.
+     */
+    public static String sortRangeLabel(String name, String range) {
+        return isFeedName(name) ? null : range;
+    }
+
     /** The name of the feed this patch adds, as it is listed. */
     public static String feedNameOf() {
         CustomFeedExtension feed = feed();
@@ -1133,12 +1527,32 @@ public abstract class CustomFeedExtension {
         }
     }
 
-    /** The address to read the feed's wiki from, or {@code null} to leave the request as it is. */
-    public static String faqUrlFor(String name) {
+    /**
+     * The address to read the feed's wiki from, or {@code null} to leave the request as it is.
+     *
+     * <p>The page asked for selects which of the site's pages is served, so that a link from one to
+     * another opens in this same sheet rather than leaving the app. The page a link names is carried
+     * in the wiki address it was rewritten to, and anything else falls back to the site's FAQ.
+     */
+    public static String faqUrlFor(String name, String page) {
         CustomFeedExtension feed = feed();
         pendingFaq = feed != null && feed.isFeed(name);
-        return pendingFaq ? feed.faqUrl() : null;
+        if (!pendingFaq) {
+            return null;
+        }
+
+        pendingWikiPage = page == null ? null : page.trim();
+        String url = feed.wikiPageUrl(pendingWikiPage);
+        return url == null ? feed.faqUrl() : url;
     }
+
+    /**
+     * The page the wiki sheet is showing, which the title and the trimming of its heading follow.
+     *
+     * <p>Held from the request being built to the response being parsed, in the same way as the page
+     * offset for a listing.
+     */
+    protected static volatile String pendingWikiPage;
 
     /** Replaces the wiki response with the site's own page. */
     public static byte[] rewriteWiki(byte[] data) {
@@ -1163,9 +1577,93 @@ public abstract class CustomFeedExtension {
      */
     public static String wikiTitleFor(String title) {
         CustomFeedExtension feed = feed();
-        return feed != null && title != null && title.startsWith(feed.feedKey())
-                ? feed.wikiTitle()
-                : title;
+        // The title is built from the name read out of the address, which carries its space escaped.
+        if (feed == null || title == null || !feed.isFeed(feedNameIn(title))) {
+            return title;
+        }
+
+        // The page is read out of the title rather than from the request, because the sheet titles
+        // itself before it asks for the page - reading it from the request would name whichever page
+        // was asked for last.
+        String page = feed.wikiPageTitle(wikiPageIn(title));
+        return page == null ? feed.wikiTitle() : page;
+    }
+
+    /**
+     * The page a wiki title was built from, which is everything after the name it follows.
+     *
+     * <p>The sheet titles itself with the subreddit and page it is reading, joined by a dash.
+     */
+    private static String wikiPageIn(String title) {
+        int separator = title.indexOf(" - ");
+        return separator == -1 ? null : title.substring(separator + " - ".length()).trim();
+    }
+
+    /**
+     * The wiki address serving one of the site's pages, or {@code null} for any other address.
+     *
+     * <p>The reverse of what is shared: an address on the site is turned back into the wiki page it is
+     * read as, so that opening a link to one shows it in the app.
+     */
+    private String wikiPageOpened(String url) {
+        String name = wikiPageNamed(url);
+        return name == null ? null : wikiAddress(name);
+    }
+
+    /**
+     * The page one of the site's addresses is served as, or {@code null} where it serves none.
+     *
+     * <p>Asked of the feed, which knows the pages it serves and the addresses they are read from.
+     */
+    protected String wikiPageNamed(String url) {
+        return null;
+    }
+
+    /** The wiki address one of the feed's pages is read under. */
+    protected final String wikiAddress(String page) {
+        // The feed's name may hold a space, which would end the address early once it is written as a
+        // Markdown link, so it is escaped the way a url carries one.
+        return REDDIT_HOSTS[0] + "/r/" + feedKey().replace(" ", "%20") + "/wiki/" + page;
+    }
+
+    /**
+     * The site's own address for a wiki page of the feed, or {@code null} for any other address.
+     *
+     * <p>The pages are served as wiki pages of the feed, so a link to one names an address Reddit does
+     * not have. What is shared is the page on the site, which is where it was read from.
+     */
+    private String wikiPageShared(String url) {
+        String marker = "/wiki/";
+        int start = url.indexOf(marker);
+        if (start == -1) {
+            return null;
+        }
+
+        // Only a wiki address of this feed is corrected; every other subreddit's wiki is left alone.
+        String name = url.substring(0, start);
+        int subreddit = name.lastIndexOf("/r/");
+        if (subreddit == -1 || !isFeed(name.substring(subreddit + "/r/".length()))) {
+            return null;
+        }
+
+        String page = url.substring(start + marker.length()).trim();
+        int query = page.indexOf('?');
+        if (query != -1) {
+            page = page.substring(0, query);
+        }
+
+        return wikiPageShareUrl(page);
+    }
+
+    /**
+     * The name a wiki title was built from, which is everything before the page it names.
+     *
+     * <p>The sheet titles itself with the subreddit and page it read, joined by a dash, so the name is
+     * what precedes the first of those.
+     */
+    private static String feedNameIn(String title) {
+        int separator = title.indexOf(" - ");
+        return separator == -1 ? title : title.substring(0, separator);
     }
 
     /**
@@ -1376,12 +1874,11 @@ public abstract class CustomFeedExtension {
     }
 
     /**
-     * The notice shown above a post's comments, naming the site in place of the archiving a post is
-     * served with.
+     * The notice shown above a post's comments, saying why it cannot be voted on or replied to.
      *
-     * <p>A post is archived so that the app does not offer to vote on or reply to it through Reddit,
-     * which it cannot do. Saying so as "archived" describes the means rather than the reason, so the
-     * notice names where the post is from instead.
+     * <p>A post is archived only while there is no account to act on the site as, which is the reason
+     * the app cannot offer either - so the notice says that rather than describing the archiving,
+     * which is the means.
      */
     public static String noticeFor(String notice, Object post) {
         CustomFeedExtension feed = feed();
@@ -1389,7 +1886,9 @@ public abstract class CustomFeedExtension {
             return notice;
         }
 
-        return notice.replace("an archived post", "a " + feed.feedName() + " post");
+        return notice.replace(
+                "This is an archived post.",
+                "You are not logged into " + feed.feedName() + ".");
     }
 
     /**
@@ -1400,6 +1899,18 @@ public abstract class CustomFeedExtension {
      */
     public static void noteToken(String value) {
         token = value;
+    }
+
+    /**
+     * Remembers the user agent the app reports, which the token is sent alongside.
+     *
+     * <p>Handed over with the token, since the token is only accepted from the client it was issued
+     * to, which a patch spoofing the client changes.
+     */
+    public static void noteUserAgent(String value) {
+        if (value != null) {
+            userAgent = value;
+        }
     }
 
     /**
@@ -1430,9 +1941,53 @@ public abstract class CustomFeedExtension {
                 return;
             }
 
-            if (feed.isFeedId(id)) {
-                throw new AuthFailureError("Not supported on " + feed.feedName());
+            if (!feed.isFeedId(id)) {
+                continue;
             }
+
+            // The action is carried out on the site rather than being sent to Reddit, which holds
+            // none of this content. The request itself is always failed, so that Volley reports it
+            // through the error listener the action was made with rather than the app believing
+            // Reddit took it - what actually came of it is said in the message.
+            WriteResult result = feed.write(params, id);
+
+            // Said here rather than left to the app, which reports a failed request as its own
+            // wording - the write was made on the site, so what came of it is what should be said.
+            String message = result.message(feed.feedName());
+            if (message != null) {
+                toast(message);
+            }
+
+            throw new AuthFailureError(result == WriteResult.DONE ? DONE_MESSAGE : message);
         }
+    }
+
+    /** Tells the user what came of a write, in the same way the app says anything else. */
+    private static void toast(String message) {
+        try {
+            gb.p.d(message);
+        } catch (Exception e) {
+            // A message that cannot be shown is not worth failing the write over.
+        }
+    }
+
+    /**
+     * Marks a failure the app is told about only so that it stops waiting, the write having been made.
+     *
+     * <p>Every write is failed at the request, since Reddit is not being asked to carry it out, so the
+     * one that succeeded has to be told apart from the ones that did not.
+     */
+    public static final String DONE_MESSAGE = "\u0000done";
+
+    /**
+     * Carries out on the site the write the request was going to ask Reddit for.
+     *
+     * <p>What is being asked for is read from the parameters the request was built with, which name
+     * the item and what is being done to it in the same way for every write.
+     *
+     * @param id the item being acted on, as Reddit's fullname for it.
+     */
+    protected WriteResult write(Map<String, String> params, String id) {
+        return WriteResult.UNSUPPORTED;
     }
 }

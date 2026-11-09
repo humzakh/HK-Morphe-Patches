@@ -1,14 +1,33 @@
 package app.morphe.extension.syncforreddit;
 
+import android.util.Log;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.Phaser;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Serves Hacker News as if it were a subreddit.
@@ -35,6 +54,9 @@ public class HackerNewsExtension extends CustomFeedExtension {
     /** The site's own FAQ, shown as the feed's wiki. */
     private static final String FAQ_URL = NEWS_HOST + "newsfaq.html";
 
+    /** The site's own formatting help, which its pages link to. */
+    private static final String FORMAT_URL = NEWS_HOST + "formatdoc";
+
     /**
      * Hacker News' own icon, the orange "Y".
      *
@@ -57,6 +79,17 @@ public class HackerNewsExtension extends CustomFeedExtension {
     private static final int MAX_COMMENT_DEPTH = 24;
 
     private static final int MAX_COMMENTS = 2000;
+
+    /**
+     * How many comments are requested at once while a thread loads.
+     *
+     * <p>Higher than for a page of stories, since a thread is the one place a request is made per
+     * item by the hundred, and Hacker News' API is served by Firebase, which is built for this.
+     */
+    private static final int COMMENT_THREADS = 48;
+
+    /** The longest a thread is waited on, after which it is shown with what has loaded. */
+    private static final long THREAD_TIMEOUT_MS = 60_000;
 
     /** Counts comments loaded for the thread being parsed, to enforce {@link #MAX_COMMENTS}. */
     private static final AtomicInteger fetched = new AtomicInteger();
@@ -216,6 +249,12 @@ public class HackerNewsExtension extends CustomFeedExtension {
                 || value.equalsIgnoreCase("Jobs");
     }
 
+    /** The feeds offered in place of Reddit's sorts, in the order the sort dialog lists them. */
+    @Override
+    protected String[] sortLabels() {
+        return new String[] { "Best", "Hot", "New", "Ask", "Show", "Jobs" };
+    }
+
     /**
      * The feeds Hacker News serves, by the name each is offered under in the sort dialog.
      *
@@ -279,6 +318,159 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected String faqUrl() {
         return FAQ_URL;
+    }
+
+    /**
+     * The pages the wiki sheet serves, by the name links to them are rewritten under.
+     *
+     * <p>The site's pages link to each other, and to sections within themselves, by file name. Those
+     * are rewritten to wiki pages of these names so that following one opens it in this same sheet
+     * rather than handing the address to a browser.
+     */
+    private static final String FAQ_PAGE = "faq";
+    private static final String GUIDELINES_PAGE = "guidelines";
+    private static final String SHOW_PAGE = "showhn";
+    private static final String FORMAT_PAGE = "formatdoc";
+
+    /** The page a subreddit's wiki opens at, which the wiki chip asks for. */
+    private static final String WIKI_INDEX_PAGE = "index";
+
+    /**
+     * The prefix a page naming one section of the FAQ is written under.
+     *
+     * <p>The site links to sections of its FAQ, which a page shown whole has nothing to scroll to. The
+     * section is served as a page of its own instead, so the link lands on what it named.
+     */
+    private static final String SECTION_PREFIX = "faq-";
+
+    @Override
+    protected String wikiPageUrl(String page) {
+        if (GUIDELINES_PAGE.equalsIgnoreCase(page)) {
+            return GUIDELINES_URL;
+        }
+        if (SHOW_PAGE.equalsIgnoreCase(page)) {
+            return SHOW_GUIDELINES_URL;
+        }
+        if (FORMAT_PAGE.equalsIgnoreCase(page)) {
+            return FORMAT_URL;
+        }
+        if (page != null && page.toLowerCase(java.util.Locale.ENGLISH).startsWith(SECTION_PREFIX)) {
+            return FAQ_URL;
+        }
+        // The wiki chip opens the feed's wiki at "index", which is the page every subreddit's wiki
+        // opens at, so that is the FAQ as much as the name it is linked to under.
+        return isFaqPage(page) ? FAQ_URL : null;
+    }
+
+    /** Whether a page names the FAQ, which the wiki opens at under either name. */
+    private static boolean isFaqPage(String page) {
+        return FAQ_PAGE.equalsIgnoreCase(page) || WIKI_INDEX_PAGE.equalsIgnoreCase(page);
+    }
+
+    @Override
+    protected String wikiPageTitle(String page) {
+        if (GUIDELINES_PAGE.equalsIgnoreCase(page)) {
+            return "Hacker News Guidelines";
+        }
+        if (SHOW_PAGE.equalsIgnoreCase(page)) {
+            return "Show HN Rules";
+        }
+        if (FORMAT_PAGE.equalsIgnoreCase(page)) {
+            return "Formatting Options";
+        }
+        return sectionTitle(sectionOf(page));
+    }
+
+    /**
+     * The title for a section of the FAQ, named as the question it answers.
+     *
+     * <p>Titled from here rather than from the heading on the page, because the sheet titles itself
+     * before it has asked for the page. Only the sections the site actually links to are named; any
+     * other is shown under the FAQ's own title.
+     */
+    private static String sectionTitle(String section) {
+        if (section == null) {
+            return null;
+        }
+
+        if (section.equalsIgnoreCase("cflag")) {
+            return "Flagging a comment";
+        }
+        if (section.equalsIgnoreCase("dead")) {
+            return "Dead posts";
+        }
+        if (section.equalsIgnoreCase("ring")) {
+            return "Asking for upvotes";
+        }
+        if (section.equalsIgnoreCase("jobads")) {
+            return "Job ads";
+        }
+        return null;
+    }
+
+    /**
+     * The page one of the site's addresses is served as, so that a link to it opens in the app.
+     *
+     * <p>The section a link names is kept, so that following one lands on what it named in the same
+     * way as a link between the pages themselves.
+     */
+    @Override
+    protected String wikiPageNamed(String url) {
+        String path = url.trim();
+        for (String host : new String[] { NEWS_HOST, NEWS_HOST.replace("https://", "http://") }) {
+            if (path.startsWith(host)) {
+                path = path.substring(host.length());
+                break;
+            }
+        }
+
+        if (path.equals(url.trim())) {
+            return null;
+        }
+
+        String section = null;
+        int hash = path.indexOf('#');
+        if (hash != -1) {
+            section = path.substring(hash + 1);
+            path = path.substring(0, hash);
+        }
+
+        String page;
+        if (path.equals("newsfaq.html")) {
+            page = FAQ_PAGE;
+        } else if (path.equals("newsguidelines.html")) {
+            page = GUIDELINES_PAGE;
+        } else if (path.equals("showhn.html")) {
+            page = SHOW_PAGE;
+        } else if (path.equals("formatdoc")) {
+            page = FORMAT_PAGE;
+        } else {
+            return null;
+        }
+
+        // A section of the FAQ is served as a page of its own, which is what a link naming one opens.
+        return FAQ_PAGE.equals(page) && section != null && !section.isEmpty()
+                ? SECTION_PREFIX + section
+                : page;
+    }
+
+    /** A section is shared as the part of the FAQ it is, which is where it is read on the site. */
+    @Override
+    protected String wikiPageShareUrl(String page) {
+        String section = sectionOf(page);
+        return section == null ? wikiPageUrl(page) : FAQ_URL + "#" + section;
+    }
+
+    /** The section a page names, or {@code null} for a whole page. */
+    private static String sectionOf(String page) {
+        if (page == null) {
+            return null;
+        }
+
+        String value = page.trim();
+        return value.toLowerCase(java.util.Locale.ENGLISH).startsWith(SECTION_PREFIX)
+                ? value.substring(SECTION_PREFIX.length())
+                : null;
     }
 
     /** Whether the body is the Hacker News story id array rather than a Reddit response. */
@@ -456,10 +648,26 @@ public class HackerNewsExtension extends CustomFeedExtension {
                 pendingStory = storyId;
             }
 
-            JSONArray postChildren = new JSONArray();
-            // Opening a post rewrites its row, so the thumbnail found when the post list was built is
-            // reused; without it the row would be rewritten with none.
-            postChildren.put(toChild(story, knownThumbnails));
+            // What the account has done is read while the comments load, rather than before them,
+            // since it is only needed once the post and its comments are written out.
+            //
+            // The account's listings are read first, so that the post's own page is read after them
+            // and what it says is what stands - they are replaced wholesale as they are read, which
+            // would otherwise put back what the post's page had just corrected.
+            //
+            // What the account has done to this post is then read from its own page, rather than being
+            // taken from those listings: a post is opened one at a time, so asking about it costs a
+            // single request, and it is right even where it was voted on or saved elsewhere since the
+            // feed was last refreshed. Its comments are on the same page, so their votes come too.
+            final String storyId = String.valueOf(story.optInt("id"));
+            ExecutorService accountReader = Executors.newSingleThreadExecutor();
+            Future<?> accountState = accountReader.submit(new Runnable() {
+                @Override
+                public void run() {
+                    readAccountListings();
+                    readSaved(storyId);
+                }
+            });
 
             fetched.set(0);
 
@@ -470,7 +678,28 @@ public class HackerNewsExtension extends CustomFeedExtension {
             List<Integer> shown = root == null
                     ? childIds(story)
                     : Collections.singletonList(root);
-            JSONArray comments = fetchComments(shown, "t3_" + pendingStory, 0);
+            long start = System.currentTimeMillis();
+            Map<Integer, JSONObject> loaded;
+            try {
+                loaded = loadComments(shown, 0);
+
+                try {
+                    accountState.get(THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                } catch (Exception e) {
+                    // Shown with what was already known about the account, rather than not at all.
+                }
+            } finally {
+                accountReader.shutdownNow();
+            }
+            Log.d(LOG_TAG, "Comments: " + Math.min(fetched.get(), MAX_COMMENTS) + " requested in "
+                    + (System.currentTimeMillis() - start) + " ms");
+
+            // Opening a post rewrites its row, so the thumbnail found when the post list was built is
+            // reused; without it the row would be rewritten with none.
+            JSONArray postChildren = new JSONArray();
+            postChildren.put(toChild(story, knownThumbnails));
+
+            JSONArray comments = buildComments(shown, loaded, "t3_" + pendingStory, 0);
 
             JSONArray response = new JSONArray();
             response.put(listing(postChildren));
@@ -492,10 +721,12 @@ public class HackerNewsExtension extends CustomFeedExtension {
     protected byte[] toRules(byte[] data) {
         try {
             boolean show = "Show".equalsIgnoreCase(currentSort);
+            String title = show ? "Show HN Rules" : "Hacker News Guidelines";
 
             JSONObject rule = new JSONObject();
-            rule.put("short_name", show ? "Show HN Guidelines" : "Hacker News Guidelines");
-            rule.put("description", readPage(data));
+            rule.put("short_name", title);
+            // The page opens with its own title, which the heading above it already says.
+            rule.put("description", withoutHeading(readPage(data), show ? "Show HN" : title));
 
             JSONArray rules = new JSONArray();
             rules.put(rule);
@@ -513,12 +744,21 @@ public class HackerNewsExtension extends CustomFeedExtension {
     @Override
     protected byte[] toWiki(byte[] data) {
         try {
-            String page = readPage(data);
+            // The page shown is the one the link asked for, which titles it and names the heading it
+            // opens with. A link to a section of the FAQ is served that section on its own.
+            String section = sectionOf(pendingWikiPage);
+            String page = section == null
+                    ? readPage(data)
+                    : readSection(data, section);
 
-            // The page opens with its own title, which the header above it already says.
-            String heading = "**" + wikiTitle() + "**";
-            if (page.startsWith(heading)) {
-                page = page.substring(heading.length()).trim();
+            // A whole page opens with its own name, which the heading above it already says. A section
+            // opens with the question it answers, which the heading says in shorter words, so that is
+            // dropped too rather than being matched against.
+            if (section == null) {
+                String title = wikiPageTitle(pendingWikiPage);
+                page = withoutHeading(page, title == null ? wikiTitle() : title);
+            } else {
+                page = withoutLeadingHeading(page);
             }
 
             JSONObject content = new JSONObject();
@@ -540,7 +780,7 @@ public class HackerNewsExtension extends CustomFeedExtension {
      * <p>The pages are a table wrapping a run of paragraphs and bold headings, so the cell holding
      * them is taken and converted the same way comment bodies are.
      */
-    private static String readPage(byte[] data) throws Exception {
+    private String readPage(byte[] data) throws Exception {
         String html = new String(data, "UTF-8");
 
         // The page's content sits between the banner image and the footer.
@@ -553,11 +793,34 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // Headings are bold on their own line; make them headings so they stand out when rendered.
         html = html.replaceAll("(?i)<b>(.*?)</b>", "\n\n**$1**\n");
 
+        // The pages link to each other, and to sections within themselves, by file name. Those are
+        // rewritten to the wiki pages this sheet serves them as, so following one opens it here rather
+        // than handing the address to a browser. The section a link named is dropped, since a page is
+        // shown whole and there is nothing to scroll to.
+        //
+        // Done before the remaining relative links are made absolute, so that these are not turned
+        // into addresses off the site instead.
+        // A link naming a section of the FAQ is served that section on its own, so that it lands on
+        // what it named rather than at the top of the whole page. Taken before the links to a page as
+        // a whole, which the same file names would otherwise match.
+        html = linkToWikiSection(html, "newsfaq\\.html");
+        html = linkToWikiSection(html, "");
+
+        html = linkToWikiPage(html, "newsfaq\\.html", FAQ_PAGE);
+        html = linkToWikiPage(html, "newsguidelines\\.html", GUIDELINES_PAGE);
+        html = linkToWikiPage(html, "showhn\\.html", SHOW_PAGE);
+        html = linkToWikiPage(html, "formatdoc", FORMAT_PAGE);
+
         // The pages link to each other by file name, which means nothing once the page is read here.
         // Attributes are quoted with either kind of quote, so both are matched.
         html = html.replaceAll("(?i)href=[\"'](?!https?://)([^\"']+)[\"']", "href=\"" + NEWS_HOST + "$1\"");
 
         String markdown = HackerNewsMarkdown.fromHtml(html);
+
+        // A backslash the page shows as text, such as the one escaping an asterisk in the formatting
+        // help, is read as escaping whatever follows it and disappears. Doubling it leaves one to
+        // read. Done before the escaping below, so the backslashes that adds are not doubled too.
+        markdown = markdown.replace("\\", "\\\\");
 
         // The pages wrap at a fixed width, which can fall inside a link's text. A link is not read as
         // one when its text runs over a line, so those are pulled back onto a single line.
@@ -571,6 +834,133 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // The pages are laid out with blank lines between every element, which read as gaps once the
         // markup is gone.
         return markdown.replaceAll("\n{3,}", "\n\n");
+    }
+
+    /**
+     * Drops the title a page opens with, which the heading above it already says.
+     *
+     * <p>The pages open with their own name as a bold line, and the guidelines follow it with a second
+     * one naming the section, so a run of them is taken rather than only the first.
+     */
+    private static String withoutHeading(String page, String heading) {
+        String text = page;
+        String bold = "**" + heading + "**";
+        if (text.startsWith(bold)) {
+            text = text.substring(bold.length()).trim();
+        }
+        return text;
+    }
+
+    /**
+     * Points the links naming one of the site's pages at the wiki page it is served as.
+     *
+     * <p>The section a link named is dropped along with the file name, since the page is shown whole.
+     *
+     * @param page the file name as a regular expression, which is matched with or without a section.
+     */
+    private String linkToWikiPage(String html, String page, String name) {
+        return html.replaceAll(
+                "(?i)href=[\"']([^\"']*/)?" + page + "(#[^\"']*)?[\"']",
+                "href=\"" + wikiPageAddress(name) + "\"");
+    }
+
+    /**
+     * Reads one section of a page, as the run of markup its heading introduces.
+     *
+     * <p>The sections are marked by an id on the element opening each, so a section is what lies
+     * between its own and the next one. Its heading is kept aside to title the sheet showing it, and
+     * dropped from the text so it is not said twice.
+     *
+     * @param section the id naming the section.
+     * @return that section as Markdown, or the whole page when it holds no such section.
+     */
+    private String readSection(byte[] data, String section) throws Exception {
+        String html = new String(data, "UTF-8");
+
+        Matcher marks = Pattern
+                .compile("(?i)<(?:b|p)[^>]*\\bid=[\"']([^\"']+)[\"'][^>]*>")
+                .matcher(html);
+
+        int start = -1;
+        while (marks.find()) {
+            if (section.equalsIgnoreCase(marks.group(1))) {
+                start = marks.start();
+                break;
+            }
+        }
+
+        if (start == -1) {
+            return readPage(data);
+        }
+
+        // A section runs until the next marked one begins. Not every heading is marked - a question
+        // may be followed by further ones that share its subject, which belong with it - so the end is
+        // the next marked heading, or where a marked paragraph is reached, the heading that introduces
+        // it rather than the paragraph itself.
+        int end = html.length();
+
+        Matcher heading = Pattern
+                .compile("(?i)<b[^>]*\\bid=[\"'][^\"']+[\"'][^>]*>")
+                .matcher(html);
+        if (heading.find(start + 1)) {
+            end = heading.start();
+        }
+
+        Matcher paragraph = Pattern
+                .compile("(?i)<p[^>]*\\bid=[\"'][^\"']+[\"'][^>]*>")
+                .matcher(html);
+        if (paragraph.find(start + 1) && paragraph.start() < end) {
+            end = paragraph.start();
+
+            // The marked paragraph continues the question above it, so that question starts the next
+            // section rather than this one keeping it.
+            Matcher bold = Pattern.compile("(?i)<b\\b[^>]*>").matcher(html);
+            int from = start + 1;
+            while (bold.find(from) && bold.start() < paragraph.start()) {
+                end = bold.start();
+                from = bold.start() + 1;
+            }
+        }
+
+        // Wrapped in the markers the page reader looks for its content between, since a section on its
+        // own carries neither the banner it follows nor the footer it precedes.
+        return readPage(("</a>" + html.substring(start, end) + "</td>").getBytes("UTF-8"));
+    }
+
+    /** Drops whatever bold line a page opens with, whatever it says. */
+    private static String withoutLeadingHeading(String page) {
+        Matcher heading = Pattern.compile("\\A\\*\\*.*?\\*\\*").matcher(page);
+        return heading.lookingAt() ? page.substring(heading.end()).trim() : page;
+    }
+
+    /**
+     * Points the links naming a section of the FAQ at the page serving that section.
+     *
+     * @param page the file name as a regular expression, empty for a link within the page being read.
+     */
+    private String linkToWikiSection(String html, String page) {
+        StringBuffer out = new StringBuffer();
+        Matcher matcher = Pattern
+                .compile("(?i)href=[\"']([^\"']*/)?" + page + "#([A-Za-z0-9_-]+)[\"']")
+                .matcher(html);
+
+        while (matcher.find()) {
+            String address = wikiPageAddress(SECTION_PREFIX + matcher.group(2));
+            matcher.appendReplacement(out, Matcher.quoteReplacement("href=\"" + address + "\""));
+        }
+
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    /**
+     * The address one of the site's pages is served under.
+     *
+     * <p>Written as a wiki address of the feed, which is what the app opens in this sheet: it routes a
+     * link containing both a Reddit host and a wiki path there, and reads the page out of it.
+     */
+    private String wikiPageAddress(String name) {
+        return wikiAddress(name);
     }
 
     /**
@@ -618,23 +1008,90 @@ public class HackerNewsExtension extends CustomFeedExtension {
     }
 
     /**
-     * Fetches ids and their replies, as Reddit comment objects.
+     * Fetches ids and their replies, by id, for {@link #buildComments} to put together.
      *
      * <p>Hacker News serves one comment per request, so a thread costs one request per comment rather
-     * than the single request a Reddit thread costs. Each level is fetched concurrently, and the tree
-     * is bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
+     * than the single request a Reddit thread costs. Each comment's replies are asked for as soon as
+     * the comment arrives, rather than a level at a time, so that no request waits on the slowest of
+     * its level. The tree is
+     * bounded by {@link #MAX_COMMENT_DEPTH} and {@link #MAX_COMMENTS} so that a large thread cannot
      * spend an unbounded number of requests.
      */
-    private JSONArray fetchComments(List<Integer> ids, String parent, int depth) throws Exception {
-        JSONArray children = new JSONArray();
+    private Map<Integer, JSONObject> loadComments(List<Integer> ids, int depth) throws Exception {
+        final Map<Integer, JSONObject> comments = new ConcurrentHashMap<>();
+        final ExecutorService executor = Executors.newFixedThreadPool(COMMENT_THREADS);
+        // Every request in flight is a party, so the thread has loaded once none are left.
+        final Phaser loading = new Phaser(1);
 
-        if (ids.isEmpty() || depth > MAX_COMMENT_DEPTH || fetched.get() >= MAX_COMMENTS) {
-            return children;
+        try {
+            for (Integer id : ids) {
+                fetchComment(id, depth, comments, executor, loading);
+            }
+            loading.awaitAdvanceInterruptibly(
+                    loading.arrive(), THREAD_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // Shown with what has loaded, rather than not at all.
+        } finally {
+            executor.shutdownNow();
         }
 
-        for (JSONObject comment : fetchItems(ids)) {
-            if (fetched.incrementAndGet() > MAX_COMMENTS) {
-                break;
+        return comments;
+    }
+
+    /** Requests one comment, and then each of its replies as soon as it has arrived. */
+    private static void fetchComment(
+            final int id,
+            final int depth,
+            final Map<Integer, JSONObject> comments,
+            final ExecutorService executor,
+            final Phaser loading
+    ) {
+        if (depth > MAX_COMMENT_DEPTH || fetched.incrementAndGet() > MAX_COMMENTS) {
+            return;
+        }
+
+        loading.register();
+        try {
+            executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        JSONObject comment = fetchItem(id);
+                        if (comment != null) {
+                            comments.put(id, comment);
+                            for (Integer reply : childIds(comment)) {
+                                fetchComment(reply, depth + 1, comments, executor, loading);
+                            }
+                        }
+                    } finally {
+                        loading.arriveAndDeregister();
+                    }
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            // The thread stopped being waited on, so nothing more is asked for.
+            loading.arriveAndDeregister();
+        }
+    }
+
+    /**
+     * Puts fetched comments together into the tree Sync parses, in the order their ids are ranked.
+     *
+     * <p>A comment that was not fetched, because it failed to load or a limit was reached, is left
+     * out along with its replies.
+     */
+    private JSONArray buildComments(
+            List<Integer> ids,
+            Map<Integer, JSONObject> comments,
+            String parent,
+            int depth
+    ) throws Exception {
+        JSONArray children = new JSONArray();
+
+        for (Integer commentId : ids) {
+            JSONObject comment = comments.get(commentId);
+            if (comment == null) {
+                continue;
             }
 
             // Deleted comments keep their replies, which are still worth showing.
@@ -665,17 +1122,19 @@ public class HackerNewsExtension extends CustomFeedExtension {
             // Hacker News does not expose per comment scores.
             data.put("score", 1);
             data.put("score_hidden", true);
-            data.put("likes", JSONObject.NULL);
-            data.put("saved", false);
+            data.put("likes", likesOf(id));
+            data.put("saved", isSaved(id));
             data.put("edited", false);
-            data.put("locked", true);
-            data.put("archived", true);
+            // Archived and locked stop the app offering to vote or reply, which it can do once an
+            // account has been given to act on the site as.
+            data.put("locked", !hasAccount());
+            data.put("archived", !hasAccount());
             data.put("gilded", 0);
             data.put("controversiality", 0);
             data.put("distinguished", JSONObject.NULL);
             data.put("stickied", false);
 
-            JSONArray replies = fetchComments(childIds(comment), "t1_" + id, depth + 1);
+            JSONArray replies = buildComments(childIds(comment), comments, "t1_" + id, depth + 1);
             // Reddit sends an empty string rather than an empty listing for a comment with no replies.
             data.put("replies", replies.length() == 0 ? "" : listing(replies));
 
@@ -802,11 +1261,13 @@ public class HackerNewsExtension extends CustomFeedExtension {
         // Hacker News does not expose per comment scores.
         data.put("score", 1);
         data.put("score_hidden", true);
-        data.put("likes", JSONObject.NULL);
-        data.put("saved", false);
+        data.put("likes", likesOf(id));
+        data.put("saved", isSaved(id));
         data.put("edited", false);
-        data.put("locked", true);
-        data.put("archived", true);
+        // Archived and locked stop the app offering to vote or reply, which it can do once an account
+        // has been given to act on the site as.
+        data.put("locked", !hasAccount());
+        data.put("archived", !hasAccount());
         data.put("gilded", 0);
         data.put("controversiality", 0);
         data.put("distinguished", JSONObject.NULL);
@@ -905,15 +1366,17 @@ public class HackerNewsExtension extends CustomFeedExtension {
 
         // Sync reads these for the post footer and action states. Hacker News exposes no equivalent,
         // so they are set to the values that render a plain, unvoted, unsaved post.
-        data.put("likes", JSONObject.NULL);
-        data.put("saved", false);
+        data.put("likes", likesOf(hnId));
+        data.put("saved", isSaved(hnId));
         data.put("hidden", false);
         data.put("visited", false);
         data.put("stickied", false);
         data.put("over_18", false);
         data.put("spoiler", false);
-        data.put("locked", true);
-        data.put("archived", true);
+        // Archived and locked stop the app offering to vote or reply, which it can do once an account
+        // has been given to act on the site as.
+        data.put("locked", !hasAccount());
+        data.put("archived", !hasAccount());
         data.put("gilded", 0);
         data.put("upvote_ratio", 1);
         data.put("edited", false);
@@ -925,4 +1388,857 @@ public class HackerNewsExtension extends CustomFeedExtension {
         child.put("data", data);
         return child;
     }
+
+    /**
+     * The items the account has marked as favourites, which is what a saved post or comment is here.
+     *
+     * <p>The site says whether one of its items is a favourite only on the account's own favourites
+     * pages, not on the item itself, so those are read once and remembered. Read for posts and
+     * comments separately, which the site lists on separate pages.
+     */
+    private static final Set<String> favorites =
+            Collections.synchronizedSet(new java.util.HashSet<String>());
+
+    /** Whether the account's listings have been read, which is done once per refresh rather than per item. */
+    private static volatile boolean accountListingsRead;
+
+    /** The address the account's favourite posts and comments are listed on. */
+    private static String favoritesUrl(boolean comments) {
+        return NEWS_HOST + "favorites?id=" + accountName() + (comments ? "&comments=t" : "");
+    }
+
+    /** The address the account's upvoted posts and comments are listed on. */
+    private static String upvotedUrl(boolean comments) {
+        return NEWS_HOST + "upvoted?id=" + accountName() + (comments ? "&comments=t" : "");
+    }
+
+    /**
+     * Reads the account's favourites, so that a saved item can be shown as saved.
+     *
+     * <p>Read once and kept, since a listing asks about every item on it and the answer only changes
+     * when something is saved here - which is noted as it is done rather than by reading again.
+     */
+    private static void readAccountListings() {
+        if (accountListingsRead || !hasAccount()) {
+            return;
+        }
+
+        accountListingsRead = true;
+
+        // Read into sets of their own and swapped in, so that what is shown never briefly holds
+        // neither the old answer nor the new one while the pages are being read.
+        //
+        // Swapped in only where they were read in full: a listing the site would not answer says
+        // nothing about what the account has done, so what is already known is kept rather than
+        // being cleared for an answer that was never given.
+        //
+        // A failed read is not asked for again here. These are read once per refresh but asked about
+        // once per item, so retrying on the spot would sign in and re-read the listings for every
+        // post in the feed while the site kept saying no. The next refresh asks again instead.
+        //
+        // The site lists what the account has upvoted in the same way as its favourites, so those are
+        // read here too and every post in a listing shows its arrow without its page having to be
+        // opened.
+        //
+        // The four listings are read at the same time rather than one after another. Each is its own
+        // chain of pages, read a page at a time behind its "More" link, so that is the most the reads
+        // can overlap. Signed in first, so that the four do not each sign in at once.
+        if (session() == null) {
+            return;
+        }
+
+        List<String> listings = Arrays.asList(
+                favoritesUrl(false), favoritesUrl(true), upvotedUrl(false), upvotedUrl(true));
+        final Map<String, Set<String>> readFrom = new ConcurrentHashMap<>();
+        parallel(listings, new Fetcher<String, Boolean>() {
+            @Override
+            public Boolean fetch(String url) {
+                Set<String> read = new java.util.HashSet<String>();
+                if (!readListingInto(url, read)) {
+                    return null;
+                }
+                readFrom.put(url, read);
+                return Boolean.TRUE;
+            }
+        }, THREAD_TIMEOUT_MS);
+
+        Set<String> favoritePosts = readFrom.get(favoritesUrl(false));
+        Set<String> favoriteComments = readFrom.get(favoritesUrl(true));
+        if (favoritePosts != null && favoriteComments != null) {
+            synchronized (favorites) {
+                favorites.clear();
+                favorites.addAll(favoritePosts);
+                favorites.addAll(favoriteComments);
+            }
+        }
+
+        Set<String> upvotedPosts = readFrom.get(upvotedUrl(false));
+        Set<String> upvotedComments = readFrom.get(upvotedUrl(true));
+        if (upvotedPosts == null || upvotedComments == null) {
+            return;
+        }
+        Set<String> upvoted = new java.util.HashSet<String>(upvotedPosts);
+        upvoted.addAll(upvotedComments);
+
+        synchronized (votes) {
+            // Only the upvotes read here are replaced. A downvote is not listed anywhere, so one noted
+            // from a post's own page is kept rather than being dropped for not appearing here.
+            for (java.util.Iterator<Map.Entry<String, Integer>> known = votes.entrySet().iterator();
+                    known.hasNext(); ) {
+                if (known.next().getValue() > 0) {
+                    known.remove();
+                }
+            }
+
+            for (String id : upvoted) {
+                votes.put(id, 1);
+            }
+        }
+    }
+
+    /**
+     * Reads the account's favourites again the next time one is asked about.
+     *
+     * <p>They are read once per page of the feed rather than per item, so that a listing asking about
+     * thirty posts costs the same as one - and read again when the feed is opened or refreshed, so a
+     * favourite added on the site itself shows up here.
+     */
+    @Override
+    protected void refreshAccountState() {
+        accountListingsRead = false;
+
+        // The votes are read again along with the favourites, so what was read before is left in place
+        // rather than being cleared here - it is replaced as the listings are read.
+    }
+
+    /**
+     * Reads the ids of everything one of the account's own listings holds.
+     *
+     * <p>The site lists thirty at a time and offers the rest behind a "More" link, so the pages are
+     * followed rather than only the first being read. Bounded, so that a link that somehow leads back
+     * on itself cannot be followed forever.
+     *
+     * <p>Read as the account, since these listings are shown only to the account they belong to,
+     * unless it has said its favourites may be public.
+     *
+     * @return whether the listing was actually read. A listing the site answered as though signed
+     *     out holds none of the account's items, but says nothing about what the account has done -
+     *     which is not the same as it having done nothing, so the two are told apart here rather
+     *     than an empty answer being taken for an emptied listing.
+     */
+    private static boolean readListingInto(String from, Set<String> read) {
+        String url = from;
+        for (int page = 0; page < MAX_ACCOUNT_PAGES && url != null; page++) {
+            String body = getAsAccount(url, session(), ACCOUNT_PAGE);
+            if (body == null) {
+                return false;
+            }
+
+            // The site answers a listing asked for without a session with its sign-in form, under an
+            // ordinary 200 rather than a refusal, so the form is what says the session has lapsed.
+            // Recognised by the field the form is built from rather than by the words around it,
+            // which are prose and could be reworded.
+            if (isSignInPage(body)) {
+                forgetSession();
+                return false;
+            }
+
+            Matcher rows = Pattern
+                    .compile("(?i)<tr[^>]*\\bclass=[\"'][^\"']*\\bathing\\b[^\"']*[\"'][^>]*\\bid=[\"']?(\\d+)")
+                    .matcher(body);
+            while (rows.find()) {
+                read.add(rows.group(1));
+            }
+
+            url = moreLinkIn(body);
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether a page the site answered with is its sign-in form rather than what was asked for.
+     *
+     * <p>Asked of the account's own listings, which the site answers this way once a session has
+     * lapsed - with an ordinary 200, so that nothing else marks it out as a refusal.
+     */
+    private static boolean isSignInPage(String page) {
+        return Pattern
+                .compile("(?i)<input[^>]*\\bname=[\"']acct[\"']")
+                .matcher(page)
+                .find();
+    }
+
+    /** How many pages of one of the account's listings are followed, far past what one is likely to hold. */
+    private static final int MAX_ACCOUNT_PAGES = 20;
+
+    /** How much of one of those pages is read, which is a listing rather than a page of comments. */
+    private static final int ACCOUNT_PAGE = 262144;
+
+    /**
+     * The address the "More" link at the foot of a listing points at, or {@code null} where it has
+     * none.
+     *
+     * <p>The link is written relative to the site, so it is made absolute the same way the pages'
+     * other links are.
+     */
+    private static String moreLinkIn(String page) {
+        Matcher more = Pattern
+                .compile("(?i)<a[^>]*\\bhref=[\"']([^\"']+)[\"'][^>]*\\bclass=[\"']morelink[\"']")
+                .matcher(page);
+        if (!more.find()) {
+            return null;
+        }
+
+        String href = more.group(1).replace("&amp;", "&");
+        return href.startsWith("http") ? href : NEWS_HOST + href;
+    }
+
+    /** The address the account signs in at, which hands back the session its pages are read with. */
+    private static final String LOGIN_URL = NEWS_HOST + "login";
+
+    /** The session the site's pages are read as, kept so that each read does not sign in again. */
+    private static volatile String session;
+
+    /**
+     * The session to read the site's pages as, signing in for one where there is none.
+     *
+     * <p>Kept until it stops working, which is noticed by a page coming back as though signed out.
+     */
+    private static String session() {
+        String current = session;
+        if (current != null) {
+            return current;
+        }
+
+        Map<String, String> fields = credentials();
+        if (fields == null) {
+            return null;
+        }
+
+        fields.put("goto", "news");
+        current = signIn(LOGIN_URL, fields);
+        session = current;
+        return current;
+    }
+
+    /** Forgets the session, so that the next page read signs in again. */
+    private static void forgetSession() {
+        session = null;
+    }
+
+    /**
+     * How much of an item's page is read for what the account has done to it.
+     *
+     * <p>Whether it is a favourite is said within the first few thousand characters, but how the
+     * account voted is said against every comment as well as against the post, so enough of the page
+     * is read to carry a thread's comments rather than only its head. A page longer than this is one
+     * whose later comments keep the votes the listings gave them.
+     */
+    private static final int ITEM_PAGE = 1048576;
+
+    /**
+     * Reads from the site whether one item is a favourite, and remembers the answer.
+     *
+     * <p>Asked of the item's own page, which says so only for the account that asks - so it is asked
+     * for as that account. Done for a single item when it is opened, rather than for a listing, which
+     * reads the account's favourites in one go instead.
+     *
+     * @return whether it could be read, the answer being remembered rather than returned.
+     */
+    static boolean readSaved(String id) {
+        Map<String, String> fields = credentials();
+        if (fields == null) {
+            return false;
+        }
+
+        String session = session();
+        if (session == null) {
+            return false;
+        }
+
+        String page = getAsAccount(NEWS_HOST + "item?id=" + id, session, ITEM_PAGE);
+        if (page == null) {
+            return false;
+        }
+
+        // The link offering to make it a favourite is written as "favorite", and as "un-favorite" for
+        // one it already is, so which is offered says which it is.
+        Matcher link = Pattern
+                .compile("(?i)<a[^>]*\\bhref=[\"']fave\\?id=" + Pattern.quote(id)
+                        + "[^\"']*[\"'][^>]*>([^<]*)</a>")
+                .matcher(page);
+        if (!link.find()) {
+            // A page with no such link is one the site answered as though signed out, so the session
+            // is dropped and the next read signs in again.
+            forgetSession();
+            return false;
+        }
+
+        noteSaved(id, link.group(1).trim().toLowerCase(java.util.Locale.ENGLISH).startsWith("un"));
+
+        // The same page says how the account voted, on this item and on the comments under it, so
+        // that is read from it rather than asked for separately.
+        readVotesIn(page);
+        return true;
+    }
+
+    /**
+     * How the account has voted on an item, where it has.
+     *
+     * <p>The site says so only on a page read as that account, in the same way as a favourite, so the
+     * two are read together from the one page rather than a page each.
+     */
+    private static final Map<String, Integer> votes =
+            Collections.synchronizedMap(new java.util.HashMap<String, Integer>());
+
+    /**
+     * How a vote reads as Reddit writes it, which is what the app draws the arrows from.
+     *
+     * <p>Reddit says an upvote as true, a downvote as false and no vote as nothing at all.
+     */
+    private static Object likesOf(String id) {
+        int vote = voteOn(id);
+        if (vote == 0) {
+            return JSONObject.NULL;
+        }
+        return vote > 0 ? Boolean.TRUE : Boolean.FALSE;
+    }
+
+    /** How the account voted on an item: 1 up, -1 down, 0 not at all. */
+    static int voteOn(String id) {
+        if (!hasAccount()) {
+            return 0;
+        }
+
+        // Read together with the favourites, since the site lists both the same way and a listing asks
+        // about each of its items in turn.
+        readAccountListings();
+
+        Integer vote = votes.get(id);
+        return vote == null ? 0 : vote;
+    }
+
+    /** Notes how an item was voted on, so a listing read afterwards agrees with what was done. */
+    private static void noteVoted(String id, int vote) {
+        if (vote == 0) {
+            votes.remove(id);
+        } else {
+            votes.put(id, vote);
+        }
+    }
+
+    /**
+     * Reads out of a page how the account has voted on the items it lists.
+     *
+     * <p>The site offers to take a vote back where one was cast, under the one id either way - what it
+     * reads is what says which way the vote went, "unvote" for an upvote and "undown" for a downvote.
+     * Read for every item the page carries rather than only the one asked about, since a thread's
+     * comments are all on it.
+     *
+     * <p>What the page says stands for every item it carries, including the ones it says nothing
+     * about: an item shown with a vote still to cast is one the account has not voted on, whatever an
+     * earlier listing said. So the page's own items are forgotten before its votes are read back in,
+     * which is what lets a vote taken back on the site show as taken back here. Only the items the
+     * page actually carries are forgotten, so a thread longer than is read keeps what the listings
+     * gave the comments below the cut.
+     */
+    private static void readVotesIn(String page) {
+        // Every item on the page carries one of these, whether or not it has been voted on: "up_" for
+        // a vote still to cast, "un_" for one already cast that can be taken back. Together they are
+        // the items the page is the answer for.
+        Matcher shown = Pattern
+                .compile("(?i)<a[^>]*\\bid=[\"'](?:up|un)_(\\d+)[\"']")
+                .matcher(page);
+
+        Set<String> covered = new java.util.HashSet<String>();
+        while (shown.find()) {
+            covered.add(shown.group(1));
+        }
+
+        Matcher taken = Pattern
+                .compile("(?i)<a[^>]*\\bid=[\"']un_(\\d+)[\"'][^>]*>([^<]*)</a>")
+                .matcher(page);
+
+        Map<String, Integer> cast = new java.util.HashMap<String, Integer>();
+        while (taken.find()) {
+            String label = taken.group(2).trim().toLowerCase(java.util.Locale.ENGLISH);
+            cast.put(taken.group(1), label.startsWith("undown") ? -1 : 1);
+        }
+
+        // Swapped in together, so that what is shown never holds neither the page's answer nor the
+        // one it replaces while the two are being reconciled.
+        synchronized (votes) {
+            votes.keySet().removeAll(covered);
+            votes.putAll(cast);
+        }
+    }
+
+    /** Whether one of the site's items is one the account has saved. */
+    static boolean isSaved(String id) {
+        if (!hasAccount()) {
+            return false;
+        }
+
+        readAccountListings();
+        return favorites.contains(id);
+    }
+
+    /** Notes an item as saved or not, so a listing read afterwards agrees with what was done. */
+    private static void noteSaved(String id, boolean saved) {
+        if (saved) {
+            favorites.add(id);
+        } else {
+            favorites.remove(id);
+        }
+    }
+
+    /**
+     * Carries out on Hacker News the write the request was going to ask Reddit for.
+     *
+     * <p>Which write it is is read from the parameters: a vote names the direction it is cast in, a
+     * reply carries the text of it, and a save is what is left. Reddit's fullname for the item is
+     * numbered the same way the site numbers its own, so the number is taken out of it.
+     */
+    @Override
+    protected WriteResult write(Map<String, String> params, String id) {
+        String item = id.indexOf('_') == -1 ? id : id.substring(id.indexOf('_') + 1);
+
+        String text = params.get("text");
+        if (text != null) {
+            return comment(item, text);
+        }
+
+        String direction = params.get("dir");
+        if (direction != null) {
+            // Reddit casts a vote as 1, -1 and 0, which are the site's up, down and taking it back.
+            if ("1".equals(direction)) {
+                return vote(item, "up");
+            }
+            if ("-1".equals(direction)) {
+                return vote(item, "down");
+            }
+            return vote(item, null);
+        }
+
+        // Saving is the only write left that names an item, and the request says which way round it
+        // is by the address it was going to be sent to rather than by a parameter.
+        return favorite(item, pendingSave);
+    }
+
+    /**
+     * Whether the save being made is a save rather than the undoing of one.
+     *
+     * <p>Sync sends both to different addresses with the same parameters, so which it is is noted from
+     * the address as it is built, in the same way the page offset for a listing is.
+     */
+    static volatile boolean pendingSave = true;
+
+    @Override
+    protected void notedSave(boolean saved) {
+        pendingSave = saved;
+    }
+
+    // Acting on Hacker News as the account the settings name.
+
+    /**
+     * The site offers no token to act with, so each write is sent with the account's own name and
+     * password, which is how its own pages and the other clients of it do the same thing.
+     */
+    private static final String VOTE_URL = NEWS_HOST + "vote";
+    private static final String FAVORITE_URL = NEWS_HOST + "fave";
+    private static final String COMMENT_URL = NEWS_HOST + "comment";
+
+    /**
+     * Votes on one of the site's items.
+     *
+     * @param id the item voted on.
+     * @param direction the vote to cast, or {@code null} to take one back.
+     * @return what came of it, which the app reports.
+     */
+    static WriteResult vote(String id, String direction) {
+        Map<String, String> fields = credentials();
+        if (fields == null) {
+            return WriteResult.NO_ACCOUNT;
+        }
+
+        fields.put("id", id);
+        fields.put("how", direction == null ? "un" : direction);
+
+        WriteResult result = resultOf(post(VOTE_URL, fields), direction);
+
+        // Noted so that a listing read afterwards agrees with what was just done.
+        if (result == WriteResult.DONE) {
+            noteVoted(id, direction == null ? 0 : ("down".equals(direction) ? -1 : 1));
+        }
+
+        return result;
+    }
+
+    /**
+     * Marks one of the site's items as a favourite, which is what saving it is here.
+     *
+     * @param id the item saved.
+     * @param saved whether it is being saved or unsaved.
+     */
+    static WriteResult favorite(String id, boolean saved) {
+        Map<String, String> fields = credentials();
+        if (fields == null) {
+            return WriteResult.NO_ACCOUNT;
+        }
+
+        fields.put("id", id);
+        // The site takes the removal of a favourite as the same request, marked as undone.
+        if (!saved) {
+            fields.put("un", "t");
+        }
+
+        WriteResult result = resultOf(post(FAVORITE_URL, fields), null);
+
+        // Noted so that a listing read afterwards agrees with what was just done, rather than the
+        // favourites having to be read again.
+        if (result == WriteResult.DONE) {
+            noteSaved(id, saved);
+        }
+
+        return result;
+    }
+
+    /**
+     * Replies to one of the site's items.
+     *
+     * @param parent the item being replied to.
+     * @param text the reply, as it was written.
+     */
+    static WriteResult comment(String parent, String text) {
+        Map<String, String> fields = credentials();
+        if (fields == null) {
+            return WriteResult.NO_ACCOUNT;
+        }
+
+        fields.put("parent", parent);
+        fields.put("text", text);
+
+        return resultOf(post(COMMENT_URL, fields), null);
+    }
+
+    /** The account's details, as every write is sent with, or {@code null} where none was given. */
+    private static Map<String, String> credentials() {
+        if (!hasAccount()) {
+            return null;
+        }
+
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("acct", accountName());
+        fields.put("pw", accountPassword());
+        return fields;
+    }
+
+    /**
+     * What the site's answer to a write says came of it.
+     *
+     * <p>A write that was taken is answered by sending the browser onward. One that was refused is
+     * answered with a page saying so, which is the same answer for a wrong password as for a vote the
+     * account is not allowed to cast - so the two are told apart by what was being asked for.
+     */
+    private static WriteResult resultOf(String location, String direction) {
+        if (location == null) {
+            return WriteResult.FAILED;
+        }
+
+        if (!NOT_REDIRECTED.equals(location)) {
+            return WriteResult.DONE;
+        }
+
+        // Downvoting is the one write the site refuses for an account that is otherwise fine, since
+        // it offers those arrows only above a certain karma.
+        return "down".equals(direction) ? WriteResult.NOT_ALLOWED : WriteResult.REFUSED;
+    }
+
+    // Acting on Hacker News as the account the settings name.
+    //
+    // The site offers no token to act with, so the account's own name and password are kept and
+    // sent with each write, which is what its own pages and its other clients do.
+
+    /** The screen the account's details are asked for on, which keeps the answers given on it. */
+    private static final String ACCOUNT_SCREEN = "PreferencesCustomFeedAccountFragment";
+
+    /** The settings the account's details are kept under, matching the patch's own names. */
+    public static final String USERNAME_PREFERENCE = "custom_feed_username";
+    public static final String PASSWORD_PREFERENCE = "custom_feed_password";
+
+    /** The account's name, or {@code null} where none has been given. */
+    protected static String accountName() {
+        return setting(USERNAME_PREFERENCE);
+    }
+
+    /** The account's password, or {@code null} where none has been given. */
+    protected static String accountPassword() {
+        return setting(PASSWORD_PREFERENCE);
+    }
+
+    /** Whether an account has been given to act as. */
+    protected static boolean hasAccount() {
+        String name = accountName();
+        String password = accountPassword();
+        return name != null && !name.isEmpty() && password != null && !password.isEmpty();
+    }
+
+    /** One of the account's details, or {@code null} where it has not been given. */
+    private static String setting(String key) {
+        try {
+            String value = t7.z.g(ACCOUNT_SCREEN).getString(key, null);
+            return value == null || value.trim().isEmpty() ? null : value.trim();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Shows one of the account's details on the row listing it, and asks for it again when tapped.
+     *
+     * <p>The app shows every settings dialog through one of its own, which only knows how to show a
+     * list of choices, so a setting asking for text cannot be one of the kinds the app opens a dialog
+     * for. These are plain rows instead, which ask for their value themselves.
+     *
+     * <p>The row is handed over already found, rather than being looked up here: the preference
+     * library the app is built on is obfuscated, so the screen holding it cannot be named from here.
+     *
+     * @param row the row listing the setting, which the patch finds on the screen.
+     * @param key the setting the row is listing.
+     */
+    @Override
+    protected void bindSetting(Object row, String key) {
+        if (!(row instanceof androidx.preference.Preference)) {
+            return;
+        }
+
+        CustomFeedExtension feed = this;
+
+        final androidx.preference.Preference preference = (androidx.preference.Preference) row;
+        final boolean secret = PASSWORD_PREFERENCE.equals(key);
+        final String title = feed.feedName() + (secret ? " password" : " username");
+        final String settingKey = key;
+
+        preference.D0(summaryOf(settingKey, secret, feed));
+        preference.A0(new androidx.preference.Preference.d() {
+            @Override
+            public boolean a(androidx.preference.Preference tapped) {
+                askFor(tapped, settingKey, title, secret, feed);
+                return true;
+            }
+        });
+    }
+
+    /** What a setting shows for its value, which never shows the password itself. */
+    private static String summaryOf(String key, boolean secret, CustomFeedExtension feed) {
+        String value = setting(key);
+        if (value == null) {
+            return secret
+                    ? "Sent to " + feed.feedName() + " with each vote, save or reply"
+                    : "The account votes, saves and replies are made as";
+        }
+
+        return secret ? "Set" : value;
+    }
+
+    /** Asks for one of the account's details, and keeps what is given. */
+    private static void askFor(
+            final androidx.preference.Preference preference,
+            final String key,
+            String title,
+            final boolean secret,
+            final CustomFeedExtension feed) {
+        final android.content.Context context = preference.k();
+
+        final android.widget.EditText input = new android.widget.EditText(context);
+        input.setSingleLine(true);
+        if (secret) {
+            input.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                    | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        }
+        input.setText(setting(key));
+
+        // Padded so the field is not against the edges of the dialog.
+        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        android.widget.FrameLayout wrapper = new android.widget.FrameLayout(context);
+        wrapper.setPadding(padding, padding / 2, padding, 0);
+        wrapper.addView(input);
+
+        new android.app.AlertDialog.Builder(context)
+                .setTitle(title)
+                .setView(wrapper)
+                .setPositiveButton("Save", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        store(key, input.getText().toString());
+                        preference.D0(summaryOf(key, secret, feed));
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Clear", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface dialog, int which) {
+                        store(key, null);
+                        preference.D0(summaryOf(key, secret, feed));
+                    }
+                })
+                .show();
+    }
+
+    /** Keeps one of the account's details, or forgets it where nothing was given. */
+    private static void store(String key, String value) {
+        try {
+            android.content.SharedPreferences.Editor editor = t7.z.g(ACCOUNT_SCREEN).edit();
+            if (value == null || value.trim().isEmpty()) {
+                editor.remove(key);
+            } else {
+                editor.putString(key, value.trim());
+            }
+            editor.apply();
+        } catch (Exception e) {
+            // A setting that cannot be kept leaves the account as it was.
+        }
+    }
+
+    /**
+     * Signs in and answers the session the site hands back, or {@code null} if it would not sign in.
+     *
+     * <p>The site's pages are read as a browser reads them, which means carrying the session it gives
+     * out at sign in rather than sending the account's details with each page - those are only taken
+     * on the forms that act on something.
+     */
+    protected static String signIn(String url, Map<String, String> fields) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(TIMEOUT_MS);
+            connection.setReadTimeout(TIMEOUT_MS);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            byte[] encoded = formBody(fields).getBytes("UTF-8");
+            connection.setFixedLengthStreamingMode(encoded.length);
+            connection.getOutputStream().write(encoded);
+            connection.getOutputStream().close();
+
+            // A sign in that was taken sends the browser onward and hands back the session with it;
+            // one that was refused answers the page saying so, with no session on it.
+            connection.getResponseCode();
+            for (int i = 0; ; i++) {
+                String name = connection.getHeaderFieldKey(i);
+                String value = connection.getHeaderField(i);
+                if (name == null && value == null) {
+                    return null;
+                }
+                if (name != null && name.equalsIgnoreCase("Set-Cookie") && value != null) {
+                    // Kept as the pair the site names its session with, without what it says about
+                    // how long it lasts.
+                    int end = value.indexOf(';');
+                    return end == -1 ? value : value.substring(0, end);
+                }
+            }
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /**
+     * Reads a url as the signed in account, only as far as it is needed.
+     *
+     * <p>The site's pages carry what is being looked for near the top and then run to a megabyte of
+     * comments, so the body is read up to a limit and the rest left unread - the connection is closed
+     * without it, rather than the whole page being pulled down to look at its first few lines.
+     *
+     * @param session the session to read as, as it was handed back at sign in.
+     * @param limit how many characters of the answer to read.
+     */
+    protected static String getAsAccount(String url, String session, int limit) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(TIMEOUT_MS);
+            connection.setReadTimeout(TIMEOUT_MS);
+            if (session != null) {
+                connection.setRequestProperty("Cookie", session);
+            }
+
+            InputStream in = connection.getInputStream();
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+
+            byte[] buffer = new byte[4096];
+            int read;
+            while (out.size() < limit && (read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            in.close();
+
+            return out.toString("UTF-8");
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /** The fields of a form, written the way a form is sent. */
+    private static String formBody(Map<String, String> fields) throws Exception {
+        StringBuilder body = new StringBuilder();
+        for (Map.Entry<String, String> field : fields.entrySet()) {
+            if (field.getValue() == null) {
+                continue;
+            }
+            if (body.length() > 0) {
+                body.append('&');
+            }
+            body.append(URLEncoder.encode(field.getKey(), "UTF-8"))
+                    .append('=')
+                    .append(URLEncoder.encode(field.getValue(), "UTF-8"));
+        }
+        return body.toString();
+    }
+
+    protected static String post(String url, Map<String, String> fields) {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setConnectTimeout(TIMEOUT_MS);
+            connection.setReadTimeout(TIMEOUT_MS);
+            connection.setRequestMethod("POST");
+            connection.setDoOutput(true);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+
+            byte[] encoded = formBody(fields).getBytes("UTF-8");
+            connection.setFixedLengthStreamingMode(encoded.length);
+            connection.getOutputStream().write(encoded);
+            connection.getOutputStream().close();
+
+            int status = connection.getResponseCode();
+            String location = connection.getHeaderField("Location");
+
+            // The site answers a taken write by sending the browser onward, and a refused one by
+            // answering the page itself. Where it went is answered so the caller can tell which.
+            return status == HttpURLConnection.HTTP_MOVED_TEMP && location != null
+                    ? location
+                    : NOT_REDIRECTED;
+        } catch (Exception e) {
+            return null;
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /** Answered in place of a redirect, for a request the site answered with a page instead. */
+    protected static final String NOT_REDIRECTED = "";
 }
